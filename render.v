@@ -1,0 +1,176 @@
+`default_nettype none
+
+module render_box20 (
+    input  wire        CLOCK_50,
+    input  wire        resetn,      // active-high: 1 = running, 0 = reset
+    input  wire        start,       // pulse/high to draw the box once
+    input  wire [9:0]  x0,          // top-left X of box
+    input  wire [8:0]  y0,          // top-left Y of box
+    input  wire [8:0]  color,       // 9-bit color: RRR_GGG_BBB
+
+    output wire [7:0]  VGA_R,
+    output wire [7:0]  VGA_G,
+    output wire [7:0]  VGA_B,
+    output wire        VGA_HS,
+    output wire        VGA_VS,
+    output wire        VGA_BLANK_N,
+    output wire        VGA_SYNC_N,
+    output wire        VGA_CLK
+);
+    // VGA geometry for 640x480 via given vga_adapter
+    localparam nX = 10;
+    localparam nY = 9;
+
+    // Constant box size = 20
+    localparam [nX-1:0] BOX_SIZE = 10'd20;
+
+    // Offsets within the box
+    wire [nX-1:0] xc;
+    wire [nY-1:0] yc;
+
+    // Control for the counters + write signal
+    reg        write;
+    reg        L_xc, L_yc;
+    reg        E_xc, E_yc;
+    reg [1:0]  state, next_state;
+
+    // Simple 2-bit FSM states
+    localparam S_IDLE  = 2'b00;
+    localparam S_DRAWX = 2'b01;
+    localparam S_NEXTY = 2'b10;
+    localparam S_DONE  = 2'b11;
+
+    // Up counters for scanning the 20x20 area
+    Up_count #(.n(nX)) u_xc (
+        .R      ({nX{1'b0}}),
+        .Clock  (CLOCK_50),
+        .Resetn (resetn),
+        .L      (L_xc),
+        .E      (E_xc),
+        .Q      (xc)
+    );
+
+    Up_count #(.n(nY)) u_yc (
+        .R      ({nY{1'b0}}),
+        .Clock  (CLOCK_50),
+        .Resetn (resetn),
+        .L      (L_yc),
+        .E      (E_yc),
+        .Q      (yc)
+    );
+
+    // FSM next-state logic
+    always @(*) begin
+        case (state)
+            S_IDLE:
+                // wait for start to begin drawing
+                next_state = start ? S_DRAWX : S_IDLE;
+
+            S_DRAWX:
+                // sweep across one row
+                next_state = (xc < BOX_SIZE-1) ? S_DRAWX : S_NEXTY;
+
+            S_NEXTY:
+                // move to next row or finish
+                next_state = (yc < BOX_SIZE-1) ? S_DRAWX : S_DONE;
+
+            S_DONE:
+                // done: go idle; box stays in VRAM
+                next_state = S_IDLE;
+
+            default:
+                next_state = S_IDLE;
+        endcase
+    end
+
+    // FSM outputs
+    always @(*) begin
+        // defaults
+        write = 1'b0;
+        L_xc  = 1'b0;
+        L_yc  = 1'b0;
+        E_xc  = 1'b0;
+        E_yc  = 1'b0;
+
+        case (state)
+            S_IDLE: begin
+                // when we (re)start, reset both offsets to 0
+                if (start) begin
+                    L_xc = 1'b1;
+                    L_yc = 1'b1;
+                end
+            end
+
+            S_DRAWX: begin
+                // write one pixel and advance xc
+                write = 1'b1;
+                E_xc  = 1'b1;
+            end
+
+            S_NEXTY: begin
+                // end of row: reset xc, increment yc
+                L_xc = 1'b1;
+                E_yc = 1'b1;
+            end
+
+            S_DONE: begin
+                // nothing; VRAM keeps the box
+            end
+        endcase
+    end
+
+    // FSM state register
+    always @(posedge CLOCK_50 or negedge resetn) begin
+        if (!resetn)
+            state <= S_IDLE;
+        else
+            state <= next_state;
+    end
+
+    // Compute absolute pixel coordinates: top-left (x0, y0) + offsets
+    wire [nX-1:0] pixel_x = x0 + xc;
+    wire [nY-1:0] pixel_y = y0 + yc;
+
+    // Connect to VGA adapter
+    vga_adapter VGA (
+        .resetn      (resetn),
+        .clock       (CLOCK_50),
+        .color       (color),
+        .x           (pixel_x),
+        .y           (pixel_y),
+        .write       (write),
+        .VGA_R       (VGA_R),
+        .VGA_G       (VGA_G),
+        .VGA_B       (VGA_B),
+        .VGA_HS      (VGA_HS),
+        .VGA_VS      (VGA_VS),
+        .VGA_BLANK_N (VGA_BLANK_N),
+        .VGA_SYNC_N  (VGA_SYNC_N),
+        .VGA_CLK     (VGA_CLK)
+    );
+    defparam VGA.RESOLUTION       = "640x480";
+    defparam VGA.COLOR_DEPTH      = 9;
+    // Adjust or override this in your top if you want:
+    defparam VGA.BACKGROUND_IMAGE = "./MIF/rainbow_640_9.mif";
+
+endmodule
+
+// ===== Helpers (same as before) =====
+
+module Up_count #(parameter n = 8)(
+    input  wire [n-1:0] R,
+    input  wire         Clock,
+    input  wire         Resetn,
+    input  wire         L,
+    input  wire         E,
+    output reg  [n-1:0] Q
+);
+    always @(posedge Clock or negedge Resetn) begin
+        if (!Resetn)
+            Q <= {n{1'b0}};
+        else if (L)
+            Q <= R;
+        else if (E)
+            Q <= Q + 1'b1;
+    end
+endmodule
