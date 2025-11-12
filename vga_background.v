@@ -14,8 +14,8 @@ module vga_demo(
     output wire       VGA_CLK
 );
 
-    localparam nX = 8;
-    localparam nY = 7;
+    localparam nX = 10;
+    localparam nY = 9;
 
     wire [8:0]    color = 9'd0;
     wire [nX-1:0] X     = {nX{1'b0}};
@@ -38,8 +38,8 @@ module vga_demo(
         .VGA_SYNC_N (VGA_SYNC_N),
         .VGA_CLK    (VGA_CLK)
     );
-    defparam VGA.RESOLUTION       = "160x120";
+    defparam VGA.RESOLUTION       = "640x480";
     defparam VGA.COLOR_DEPTH      = 9;
-    defparam VGA.BACKGROUND_IMAGE = "./MIF/bmp_160_9.mif";
+    defparam VGA.BACKGROUND_IMAGE = "./MIF/bmp_640_9.mif";
 
 endmodule
