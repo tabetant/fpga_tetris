@@ -11,7 +11,7 @@ view wave
 add wave -r /*
 
 # Run long enough and fit the view
-run 5 ms
+run 2 s
 wave zoom full
 
 # Optional: timeline in ns
