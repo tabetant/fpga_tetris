@@ -4,19 +4,21 @@
 // per control: KEY -> invert -> synchronizer -> debouncer (5 ms) -> edge detector (rising edge, 1 clk)
 // -> pending_event (re-timed to tick_input; max 1 action per frame)
 // outputs from the top will be used by FSM: left_final, right_final, rot_final
-module game(SW, KEY, CLOCK_50);
+module tetris(SW, KEY, CLOCK_50, LEDR);
     input [9:0] SW;
     input [3:0] KEY;
     input CLOCK_50;
+	 output [9:0] LEDR;
 
     // sync active low reset
     wire resetn;
     assign resetn = ~KEY[3];
 
     // frame rate for inputs (100 Hz)
-    wire tick_input;
+    wire tick_input, tick_gravity;
     tick_i in(CLOCK_50, resetn, tick_input); // from ticks.v file
-    
+    tick_g gravity(CLOCK_50, resetn, tick_gravity);
+	 
     // move left, move right, rotate clockwise
     wire left, right, rotate;
     assign rotate = ~KEY[0];
@@ -49,4 +51,6 @@ module game(SW, KEY, CLOCK_50);
     pending_event p_rot(rot_pulse, tick_input, resetn, CLOCK_50, rot_final);
 
     // left_final, right_final, rot_final will feed our FSM
+	 
+	 gamelogic GAME(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tick_gravity);
 endmodule
