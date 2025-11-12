@@ -26,12 +26,12 @@
 // 3 - if all conditions keep collide = 0 , accept the move:
 // piece_x += dX, piece_y += dY, rot = new_rot
 
-module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tick_gravity); // board_rdata, board_rx, board_ry, board_we, board_wx, board_wy, board_wdata)
+module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tick_gravity, blink_g); // board_rdata, board_rx, board_ry, board_we, board_wx, board_wy, board_wdata)
     input CLOCK_50, resetn;
-
+	input blink_g;
     // testing + sanity check
     output [9:0] LEDR;
-
+	
     // input debounced clean pulses
     input left_final, right_final, rot_final;
 
@@ -194,7 +194,7 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
     assign LEDR[0] = left_final;
     assign LEDR[1] = right_final;
     assign LEDR[2] = rot_final;
-    assign LEDR[3] = tick_gravity;
+    assign LEDR[3] = blink_g;
     assign LEDR[4] = move_accept;
     assign LEDR[7:5] = state; // (3 bits)
     assign LEDR[8] = want_rot;
