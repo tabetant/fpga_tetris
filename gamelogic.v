@@ -26,7 +26,7 @@
 // 3 - if all conditions keep collide = 0 , accept the move:
 // piece_x += dX, piece_y += dY, rot = new_rot
 
-module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tick_gravity, board_rdata, board_rx, board_ry, board_we, board_wx, board_wy, board_wdata);
+module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tick_gravity); // board_rdata, board_rx, board_ry, board_we, board_wx, board_wy, board_wdata)
     input CLOCK_50, resetn;
 
     // testing + sanity check
@@ -38,6 +38,8 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
     input tick_gravity; // gravity timer
 
     // board reading
+	 
+	 /*
     input board_rdata; // 1 if (board_rx, board_ry) is occupied
     output reg [3:0] board_rx;
     output reg [4:0] board_ry;
@@ -47,6 +49,7 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
     output reg [3:0] board_wx; // writing X address
     output reg [4:0] board_wy; // writing Y address
     output reg board_wdata; // 1 to set cell occupied
+	 */
 
     // FSM states
     parameter S_IDLE = 3'd0, S_SPAWN = 3'd1, S_FALL = 3'd2, S_LOCK = 3'd3, S_CLEAR = 3'd4;
@@ -93,13 +96,16 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
         case(state)
             S_IDLE: next_state = S_SPAWN;
             S_SPAWN: 
+				begin
                 if (collide)
                     next_state = S_FALL; // next_state = S_GAME_OVER : to be implemented later;
                 else 
                 begin
                     next_state = S_FALL;
                 end
+				end
             S_FALL: 
+				begin
                 if (left_final) 
                 begin
                     dRot = 0;
@@ -131,9 +137,10 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
                     new_rot = (rot + dRot) & 2'b11;
                     // compute offsets dy, dx
                 end
-                have_action = want_left | want_right | want_rot | want_grav;
+                have_action = (want_left || want_right || want_rot || want_grav);
                 collide = (want_left && (piece_x == 4'd0)) || (want_right && (piece_x == 4'd9)) || want_grav && (piece_y == 5'd19);
                 move_accept = have_action & ~collide;
+				end
             S_LOCK: // write the 4 blocks of active piece into board memory
 
             S_CLEAR: next_state = S_SPAWN; // will change for next milestone
@@ -151,12 +158,14 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
             rot <= 0;
             shape_id <= 0;
             lock_i <= 0;
+				/*
             board_we <= 0;
             board_wdata <= 0;
             board_wx <= 0;
             board_wy <= 0;
             board_rx <= 0;
             board_ry <= 0;
+				*/
             spawn_x <= 4'd4;
             spawn_y <= 5'd0;
         end
@@ -182,13 +191,12 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
     end
     
     // testing
-    LEDR[0] = left_final
-    LEDR[1] = right_final
-    LEDR[2] = rot_final
-    LEDR[3] = tick_gravity
-    LEDR[4] = move_accept
-    LEDR[7:5] = state (3 bits)
-    LEDR[8] = want_rot
-    LEDR[9] = collide
+    assign LEDR[0] = left_final;
+    assign LEDR[1] = right_final;
+    assign LEDR[2] = rot_final;
+    assign LEDR[3] = tick_gravity;
+    assign LEDR[4] = move_accept;
+    assign LEDR[7:5] = state; // (3 bits)
+    assign LEDR[8] = want_rot;
+    assign LEDR[9] = collide;
 endmodule
-
