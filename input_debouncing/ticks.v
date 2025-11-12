@@ -1,3 +1,14 @@
+// for modelsim:
+`timescale 1ns/1ps
+
+`ifndef SIM
+  localparam INPUT_MAX = 20'd499_999;     // ~10 ms @ 50 MHz (100 Hz)
+  localparam GRAV_MAX  = 26'd24_999_999;  // ~0.5 s @ 50 MHz
+`else
+  localparam INPUT_MAX = 20'd999;         // fast in sim (~20 us)
+  localparam GRAV_MAX  = 26'd49_999;      // fast in sim (~1 ms)
+`endif
+
 module tick_i(CLOCK_50, resetn, tick_input);
     input CLOCK_50, resetn;
     output reg tick_input;
