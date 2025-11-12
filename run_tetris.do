@@ -63,4 +63,4 @@ add wave sim:/tb_tetris/DUT/GAME/piece_y
 add wave sim:/tb_tetris/DUT/GAME/rot
 
 # Run
-run 5 ms
+run 200 ms
