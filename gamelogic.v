@@ -194,26 +194,13 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
 	// make the one-clock left_final visible for ~1 tick_input period
 reg left_vis;
 always @(posedge CLOCK_50) begin
-  if (!resetn)
-    left_vis <= 1'b0;
-  else if (left_final)
-    left_vis <= 1'b1;        // light up when a pulse arrives
-  else if (tick_input)
-    left_vis <= 1'b0;        // clear at next input frame tick
+  if (!resetn)         left_vis <= 1'b0;
+  else if (left_final) left_vis <= 1'b1;  // set on pulse
+  else if (tick_input) left_vis <= 1'b0;  // clear at next frame tick
 end
 
-	// one-hot column bar: LEDR[ piece_x ] turns on
-wire [9:0] col_onehot = 10'b0000000001 << GAME.piece_x; // if mapping in top: use instance name (e.g., GAME)
-assign LEDR[9:0] = col_onehot | {LEDR[9:1], LEDR[0]};   // keep LEDR[0] from step 1 visible
-	
-	assign LEDR[0] = left_vis;
-    assign LEDR[1] = right_final;
-    assign LEDR[2] = rot_final;
-    assign LEDR[3] = blink_g;
-    assign LEDR[4] = move_accept;
-    assign LEDR[7:5] = state; // (3 bits)
-    assign LEDR[8] = want_rot;
-    assign LEDR[9] = collide;
+assign LEDR[9] = left_vis;  // big, obvious “LEFT pressed” lamp
+
 endmodule
 
 
