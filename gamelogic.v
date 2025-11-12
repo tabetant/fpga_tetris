@@ -189,10 +189,19 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
  
         end
     end
-    
-	 assign LEDR[3] = blink_g;
-	 assign LEDR[7:5] = state;
-	 assign LEDR[0] = left_final;
+    // for demo
+	// 1) One-hot for X (10 LEDs = 10 columns)
+wire [9:0] x_onehot = (10'b1 << piece_x);  // piece_x is 0..9
+
+// 2) Binary for Y on lower 5 LEDs (19 fits in 5 bits)
+wire [9:0] y_binary = {1'b1, 4'b0000, piece_y[4:0]};
+// ^ LED9 = 1 to indicate “Y mode”, LEDs[4:0] = binary Y
+
+// 3) Use your existing blink_g (toggles on each tick_gravity)
+//    - when blink_g==0 → show X bar
+//    - when blink_g==1 → show Y in binary + mode indicator on LED9
+assign LEDR = (blink_g) ? y_binary : x_onehot;
+
 
 endmodule
 
