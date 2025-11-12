@@ -1,20 +1,23 @@
-# clean & compile
-vlib work
-vmap work work
-vlog +define+SIM *.v
-
-# launch WITH GUI and 1 ns resolution, don’t auto-exit
-vsim -gui -novopt -onfinish stop -t 1ns work.tb_tetris
-
-# open the Wave window explicitly
+# (assumes you've already compiled and launched tb_tetris)
 view wave
+# clear any existing wave items
+quietly wave delete *
 
-# add EVERYTHING recursively (no fragile paths)
-add wave -r /*
+# clock + keys
+add wave sim:/tb_tetris/CLOCK_50
+add wave -radix binary sim:/tb_tetris/KEY
 
-# run long enough to see activity and fit the view
-run 200 ms
-wave zoom full
+# ticks (instance names from your top: in = tick_i, gravity = tick_g)
+add wave sim:/tb_tetris/DUT/in/tick_input
+add wave sim:/tb_tetris/DUT/gravity/tick_gravity
 
-# (optional) show ns in the timeline
+# left input chain inside top (DUT = tetris)
+add wave sim:/tb_tetris/DUT/left
+add wave sim:/tb_tetris/DUT/left_sync
+add wave sim:/tb_tetris/DUT/left_level
+add wave sim:/tb_tetris/DUT/left_pulse
+add wave sim:/tb_tetris/DUT/left_final
+
+# make it readable
 configure wave -timelineunits ns
+wave zoom full
