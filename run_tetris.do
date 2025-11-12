@@ -1,31 +1,20 @@
-# compile
+# clean & compile
 vlib work
 vmap work work
-vlog +define+SIM  \
-  ticks.v flipflop.v synchronizer.v debouncer.v edgedetect.v \
-  pending_event.v gamelogic.v tetris.v tb_tetris.v
+vlog +define+SIM *.v
 
-# simulate (force simulator time resolution to 1 ns)
-vsim -novopt -onfinish stop -t 1ns work.tb_tetris
+# launch WITH GUI and 1 ns resolution, don’t auto-exit
+vsim -gui -novopt -onfinish stop -t 1ns work.tb_tetris
 
-# show the waveform timeline in ns (not ps)
-configure wave -timelineunits ns
-# (optional) show values with 1 ns precision in the wave pane
-configure wave -valueprecision 1
+# open the Wave window explicitly
+view wave
 
-# minimal waves (keep it small)
-add wave sim:/tb_tetris/CLOCK_50
-add wave sim:/tb_tetris/KEY
-add wave sim:/tb_tetris/DUT/in/tick_input
-add wave sim:/tb_tetris/DUT/left
-add wave sim:/tb_tetris/DUT/left_sync
-add wave sim:/tb_tetris/DUT/left_level
-add wave sim:/tb_tetris/DUT/left_pulse
-add wave sim:/tb_tetris/DUT/left_final
-add wave sim:/tb_tetris/DUT/GAME/state
-add wave sim:/tb_tetris/DUT/GAME/move_accept
+# add EVERYTHING recursively (no fragile paths)
+add wave -r /*
 
-# start zoomed to the whole run so you see activity immediately
-run 2 s
+# run long enough to see activity and fit the view
+run 200 ms
 wave zoom full
 
+# (optional) show ns in the timeline
+configure wave -timelineunits ns
