@@ -12,20 +12,21 @@ module tb_tetris;
   always #10 CLOCK_50 = ~CLOCK_50;
 
   initial begin
-    // proper reset pulse (your RTL uses: resetn = KEY[3]; active when KEY[3]=0)
-    repeat (2) @(posedge CLOCK_50);
-    KEY[3] = 1'b0;              // assert reset
-    repeat (8) @(posedge CLOCK_50);
-    KEY[3] = 1'b1;              // deassert reset
+  // proper reset
+  KEY = 4'b1111;                 // idle high (board-like)
+  repeat (2)  @(posedge CLOCK_50);
+  KEY[3] = 1'b0;                 // assert reset (resetn = KEY[3])
+  repeat (8)  @(posedge CLOCK_50);
+  KEY[3] = 1'b1;                 // release reset
+  repeat (50) @(posedge CLOCK_50);
 
-    // wait a bit, then tap LEFT (KEY[1] active-low)
-    repeat (50) @(posedge CLOCK_50);
-    KEY[1] = 1'b0;              // press
-    repeat (10) @(posedge CLOCK_50);
-    KEY[1] = 1'b1;              // release
+  // HOLD LEFT long enough to pass debounce (~5 ms = 250k clocks @ 50 MHz)
+  KEY[1] = 1'b0;                 // press LEFT (active-low)
+  repeat (300000) @(posedge CLOCK_50); // ~6 ms
+  KEY[1] = 1'b1;                 // release
+  repeat (300000) @(posedge CLOCK_50); // let it settle
 
-    // let it run so you see tick-input alignment
-    repeat (10000) @(posedge CLOCK_50);
-    // no $finish / $stop needed; .do uses -onfinish stop
-  end
+  // leave sim running (your .do uses -onfinish stop)
+end
+
 endmodule
