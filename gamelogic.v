@@ -190,29 +190,9 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
         end
     end
     
-    // testing
-	// make the one-clock left_final visible for ~1 tick_input period
-reg left_vis;
-always @(posedge CLOCK_50) begin
-  if (!resetn)         left_vis <= 1'b0;
-  else if (left_final) left_vis <= 1'b1;  // set on pulse
-  else if (tick_input) left_vis <= 1'b0;  // clear at next frame tick
-end
-
-	// one-hot cursor from the FSM instance (adjust instance name if needed)
-wire [9:0] cursor = (10'b1 << GAME.piece_x);
-
-// Final LED map (choose unique bits; don’t OR buses blindly)
-	assign LEDR[0] = left_vis;  // or left_vis if you added it
-assign LEDR[1] = ~KEY[1];
-assign LEDR[2] = left;
-assign LEDR[3] = left_level;
-assign LEDR[4] = left_pulse;
-assign LEDR[6] = tick_input;
-assign LEDR[9:0] = cursor;    // keep this last only if no other LED bits are reused
-
-
-assign LEDR[9] = left_vis;  // big, obvious “LEFT pressed” lamp
+	 assign LEDR[3] = blink_g;
+	 assign LEDR[7:5] = state;
+	 assign LEDR[0] = left_final;
 
 endmodule
 
