@@ -1,6 +1,6 @@
 `default_nettype none
 
-module vga_demo(
+module vga_background(
     input  wire       CLOCK_50,
     input  wire [3:0] KEY,
     output wire [9:0] LEDR,
