@@ -26,6 +26,6 @@ add wave sim:/tb_tetris/DUT/GAME/state
 add wave sim:/tb_tetris/DUT/GAME/move_accept
 
 # start zoomed to the whole run so you see activity immediately
-run 200 ms
+run 2 s
 wave zoom full
 
