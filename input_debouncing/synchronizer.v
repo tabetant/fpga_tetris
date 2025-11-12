@@ -12,7 +12,7 @@ module synchronizer(clock, D, resetn, key_sync);
     output key_sync; // synchronized output
 
     // 2-stage FF reduces risk if signal is sampled on rising edge
-    reg Q;
+    wire Q;
     flipflop f1(clock, D, resetn, Q);
     flipflop f2(clock, Q, resetn, key_sync);
 endmodule
