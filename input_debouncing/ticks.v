@@ -20,7 +20,7 @@ module tick_i(CLOCK_50, resetn, tick_input);
             tick_input <= 0;
             count <= 0;
         end
-        else if (count == 20'd499_999)
+		else if (count == INPUT_MAX)
         begin
             tick_input <= 1'b1;
             count <= 0;
@@ -45,7 +45,7 @@ module tick_g(CLOCK_50, resetn, tick_gravity, blink);
             count <= 0;
 				blink <= 0;
         end
-        else if (count == 26'd24_999_999)
+		else if (count == GRAV_MAX)
         begin
             tick_gravity <= 1'b1;
             count <= 0;
