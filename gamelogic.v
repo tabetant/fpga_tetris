@@ -26,12 +26,12 @@
 // 3 - if all conditions keep collide = 0 , accept the move:
 // piece_x += dX, piece_y += dY, rot = new_rot
 
-module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tick_gravity, blink_g); // board_rdata, board_rx, board_ry, board_we, board_wx, board_wy, board_wdata)
+module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tick_gravity, board_rdata, board_rx, board_ry, board_we, board_wx, board_wy, board_wdata, score);
     input CLOCK_50, resetn;
-	input blink_g;
+
     // testing + sanity check
     output [9:0] LEDR;
-	
+
     // input debounced clean pulses
     input left_final, right_final, rot_final;
 
@@ -39,17 +39,17 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
 
     // board reading
 	 
-	 /*
     input board_rdata; // 1 if (board_rx, board_ry) is occupied
     output reg [3:0] board_rx;
     output reg [4:0] board_ry;
+    output reg [4:0] score;
 
     // board writing
     output reg board_we; // 1-cycle write enable
     output reg [3:0] board_wx; // writing X address
     output reg [4:0] board_wy; // writing Y address
     output reg board_wdata; // 1 to set cell occupied
-	 */
+	 
 
     // FSM states
     parameter S_IDLE = 3'd0, S_SPAWN = 3'd1, S_FALL = 3'd2, S_LOCK = 3'd3, S_CLEAR = 3'd4;
@@ -75,10 +75,82 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
     reg have_action;
     reg signed [2:0] dX, dY;
 
-    reg [3:0] tx; // target x
-    reg [4:0] ty; // target y 
     reg collide; // for violations
     reg [1:0] new_rot; // target rot (rot+dRot) % 4
+
+    // linking to shape offsets
+
+    // current rotation (for LOCK writes)
+    wire [1:0] dx0_c, dy0_c, dx1_c, dy1_c, dx2_c, dy2_c, dx3_c, dy3_c;
+
+    // trial rotation (for collision test of this move)
+    wire [1:0] dx0_t, dy0_t, dx1_t, dy1_t, dx2_t, dy2_t, dx3_t, dy3_t;
+
+    tetris_piece_offsets OFF_CUR (
+        .shape_id (shape_id),
+        .rot      (rot),  
+        .dx0(dx0_c), .dy0(dy0_c),
+        .dx1(dx1_c), .dy1(dy1_c),
+        .dx2(dx2_c), .dy2(dy2_c),
+        .dx3(dx3_c), .dy3(dy3_c)
+    );
+    
+    // trial rotation (for collision checks)
+    tetris_piece_offsets OFF_TRY (
+        .shape_id (shape_id),
+        .rot      (new_rot),  
+        .dx0(dx0_t), .dy0(dy0_t),
+        .dx1(dx1_t), .dy1(dy1_t),
+        .dx2(dx2_t), .dy2(dy2_t),
+        .dx3(dx3_t), .dy3(dy3_t)
+    );
+
+
+    // for S_LOCK
+    reg [1:0] lock_phase;   // 0..3
+    reg [3:0] wx_hold [0:3];
+    reg [4:0] wy_hold [0:3];
+
+    // compute target piece and check collision
+
+    reg collide_bounds;
+
+    wire [4:0] base_x = {1'b0, piece_x};
+    wire [5:0] base_y = {1'b0, piece_y};
+
+    wire [4:0] bx0 = base_x + {3'b000, dx0_t};
+    wire [4:0] bx1 = base_x + {3'b000, dx1_t};
+    wire [4:0] bx2 = base_x + {3'b000, dx2_t};
+    wire [4:0] bx3 = base_x + {3'b000, dx3_t};
+
+    wire [5:0] by0 = base_y + {4'b0000, dy0_t};
+    wire [5:0] by1 = base_y + {4'b0000, dy1_t};
+    wire [5:0] by2 = base_y + {4'b0000, dy2_t};
+    wire [5:0] by3 = base_y + {4'b0000, dy3_t};
+
+    wire under0 = want_left && (bx0 == 5'd0);
+    wire under1 = want_left && (bx1 == 5'd0);
+    wire under2 = want_left && (bx2 == 5'd0);
+    wire under3 = want_left && (bx3 == 5'd0);
+
+    wire [4:0] tx0 = bx0 + (want_right ? 5'd1 : 5'd0) - (want_left ? 5'd1 : 5'd0);
+    wire [4:0] tx1 = bx1 + (want_right ? 5'd1 : 5'd0) - (want_left ? 5'd1 : 5'd0);
+    wire [4:0] tx2 = bx2 + (want_right ? 5'd1 : 5'd0) - (want_left ? 5'd1 : 5'd0);
+    wire [4:0] tx3 = bx3 + (want_right ? 5'd1 : 5'd0) - (want_left ? 5'd1 : 5'd0);
+    
+    wire [5:0] ty0 = by0 + (want_grav ? 6'd1 : 6'd0);
+    wire [5:0] ty1 = by1 + (want_grav ? 6'd1 : 6'd0);
+    wire [5:0] ty2 = by2 + (want_grav ? 6'd1 : 6'd0);
+    wire [5:0] ty3 = by3 + (want_grav ? 6'd1 : 6'd0);   
+    
+    always@*
+    begin
+        collide_bounds = 1'b0;
+        if (under0 || tx0 > 5'd9 || ty0 > 6'd19) collide_bounds = 1'b1;
+        if (under1 || tx1 > 5'd9 || ty1 > 6'd19) collide_bounds = 1'b1;
+        if (under2 || tx2 > 5'd9 || ty2 > 6'd19) collide_bounds = 1'b1;
+        if (under3 || tx3 > 5'd9 || ty3 > 6'd19) collide_bounds = 1'b1;
+    end
 
     always@*
     begin
@@ -93,10 +165,17 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
         move_accept = 0;
         collide = 0;
         new_rot = rot;
+        board_rx = piece_x;
+        board_ry = piece_y;
+        board_we = 1'b0;
+        board_wdata = 1'b0;
+        board_wx = 4'd0;
+        board_wy = 5'd0; 
         case(state)
             S_IDLE: next_state = S_SPAWN;
             S_SPAWN: 
 				begin
+                board_we = 1'b0;
                 if (collide)
                     next_state = S_FALL; // next_state = S_GAME_OVER : to be implemented later;
                 else 
@@ -105,46 +184,61 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
                 end
 				end
             S_FALL: 
-				begin
+			begin
                 if (left_final) 
                 begin
                     dRot = 0;
                     want_left = 1;
                     dX = -1;
-                    new_rot = (rot + dRot) & 2'b11;
-                    
-                    // compute offsets dy, dx
                 end
                 else if (right_final)
                 begin
                     dRot = 0;
                     want_right = 1;
                     dX = 1;
-                    new_rot = (rot + dRot) & 2'b11;
-                    // compute offsets dy, dx
                 end
                 else if (rot_final)
                 begin
                     want_rot = 1;
                     dRot = 1;
-                    new_rot = (rot + dRot) & 2'b11;
-                    // compute offsets dy, dx
                 end
                 else if(tick_gravity)
                 begin
                     want_grav = 1;
                     dY = 1;
-                    new_rot = (rot + dRot) & 2'b11;
-                    // compute offsets dy, dx
                 end
+                new_rot = (rot + dRot) & 2'b11;
                 have_action = (want_left || want_right || want_rot || want_grav);
-                collide = (want_left && (piece_x == 4'd0)) || (want_right && (piece_x == 4'd9)) || want_grav && (piece_y == 5'd19);
+                collide = collide_bounds;
                 move_accept = have_action & ~collide;
-				end
+                if (have_action) 
+                begin
+                    if (collide)
+                        next_state = S_LOCK; 
+                    else 
+                        move_accept = 1'b1; // normal move
+                end
+            end
             S_LOCK: // write the 4 blocks of active piece into board memory
+            begin
+                // write one cell per cycle
+                board_we = 1'b1;
+                board_wdata = 1'b1;
+                case (lock_phase)
+                    2'd0: begin board_wx = wx_hold[0]; board_wy = wy_hold[0]; end
+                    2'd1: begin board_wx = wx_hold[1]; board_wy = wy_hold[1]; end
+                    2'd2: begin board_wx = wx_hold[2]; board_wy = wy_hold[2]; end
+                    2'd3: begin board_wx = wx_hold[3]; board_wy = wy_hold[3]; end
+                endcase
+    
+                next_state = (lock_phase == 2'd3) ? S_SPAWN : S_LOCK;
+            end
 
             S_CLEAR: next_state = S_SPAWN; // will change for next milestone
-            default: next_state = S_IDLE;
+            default: begin 
+                next_state = S_IDLE;
+                board_we = 1'b0;
+            end
         endcase
     end
 
@@ -152,6 +246,7 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
     begin
         if(!resetn)
         begin
+            lock_phase <= 0;
             state <= S_IDLE;
             piece_x <= 0;
             piece_y <= 0;
@@ -168,6 +263,7 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
 				*/
             spawn_x <= 4'd4;
             spawn_y <= 5'd0;
+            score <= 0;
         end
         else
         begin
@@ -186,24 +282,34 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
                     if(want_rot) 
                         rot <= new_rot;
                 end
- 
+                if(state == S_FALL && next_state == S_LOCK)
+                begin
+                    // prepare write list for LOCK (using current rot)
+                    wx_hold[0] <= piece_x + dx0_c;
+                    wy_hold[0] <= piece_y + dy0_c;
+                    wx_hold[1] <= piece_x + dx1_c;
+                    wy_hold[1] <= piece_y + dy1_c;
+                    wx_hold[2] <= piece_x + dx2_c;
+                    wy_hold[2] <= piece_y + dy2_c;
+                    wx_hold[3] <= piece_x + dx3_c;
+                    wy_hold[3] <= piece_y + dy3_c;
+                    lock_phase <= 2'd0;
+                end
+                if (state == S_LOCK)
+                begin
+                    if (lock_phase == 2'd3) 
+                        lock_phase <= 2'd0;
+                        if (score != 5'd31) 
+                            score <= score + 5'd1;
+                        else
+                            score <= score;  // hold at max
+                    else 
+                        lock_phase <= lock_phase + 2'd1; 
+                end   
         end
     end
-    // for demo
-	// 1) One-hot for X (10 LEDs = 10 columns)
-wire [9:0] x_onehot = (10'b1 << piece_x);  // piece_x is 0..9
-
-// 2) Binary for Y on lower 5 LEDs (19 fits in 5 bits)
-wire [9:0] y_binary = {1'b1, 4'b0000, piece_y[4:0]};
-// ^ LED9 = 1 to indicate “Y mode”, LEDs[4:0] = binary Y
-
-// 3) Use your existing blink_g (toggles on each tick_gravity)
-//    - when blink_g==0 → show X bar
-//    - when blink_g==1 → show Y in binary + mode indicator on LED9
-assign LEDR = (blink_g) ? y_binary : x_onehot;
-
-
+    assign LEDR[7:5] = state;
+    assign LEDR[0]   = move_accept;
+    assign LEDR[1]   = collide;
+    assign LEDR[2]   = tick_gravity;
 endmodule
-
-
-
