@@ -1,7 +1,7 @@
 module tick_g (
     input  wire        CLOCK_50,
     input  wire        resetn,
-    input  wire [7:0]  score,
+    input  wire [4:0]  score,
     output reg         tick_gravity,
     output reg         blink
 );
