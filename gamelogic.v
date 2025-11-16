@@ -26,7 +26,7 @@
 // 3 - if all conditions keep collide = 0 , accept the move:
 // piece_x += dX, piece_y += dY, rot = new_rot
 
-module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tick_gravity, board_rdata, board_rx, board_ry, board_we, board_wx, board_wy, board_wdata, score);
+module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tick_gravity, board_rdata, board_rx, board_ry, board_we, board_wx, board_wy, board_wdata, score, VGA_R, VGA_G, VGA_B, VGA_HS, VGA_V, VGA_BLANK_N, VGA_SYNC_N, VGA_CLK;
     input CLOCK_50, resetn;
 
     // testing + sanity check
