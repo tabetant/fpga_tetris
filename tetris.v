@@ -4,12 +4,22 @@
 // per control: KEY -> invert -> synchronizer -> debouncer (5 ms) -> edge detector (rising edge, 1 clk)
 // -> pending_event (re-timed to tick_input; max 1 action per frame)
 // outputs from the top will be used by FSM: left_final, right_final, rot_final
-module tetris(SW, KEY, CLOCK_50, LEDR);
+
+module tetris(SW, KEY, CLOCK_50, LEDR, VGA_R, VGA_G, VGA_B, VGA_HS, VGA_V, VGA_BLANK_N, VGA_SYNC_N, VGA_CLK);
     input [9:0] SW;
     input [3:0] KEY;
     input CLOCK_50;
 	output [9:0] LEDR;
 
+	output wire [7:0]  VGA_R,
+    output wire [7:0]  VGA_G,
+    output wire [7:0]  VGA_B,
+    output wire        VGA_HS,
+    output wire        VGA_VS,
+    output wire        VGA_BLANK_N,
+    output wire        VGA_SYNC_N,
+    output wire        VGA_CLK
+	
     // sync active low reset
     wire resetn;
     assign resetn = KEY[3];
@@ -63,6 +73,6 @@ module tetris(SW, KEY, CLOCK_50, LEDR);
     wire        board_rdata;
 
 board10x20 BOARD (CLOCK_50, resetn, board_we, board_wx, board_wy, board_wdata, board_rx, board_ry, board_rdata);
-gamelogic GAME(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tick_gravity, board_rdata, board_rx, board_ry, board_we, board_wx, board_wy, board_wdata, score);
+	gamelogic GAME(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tick_gravity, board_rdata, board_rx, board_ry, board_we, board_wx, board_wy, board_wdata, score, VGA_R, VGA_G, VGA_B, VGA_HS, VGA_V, VGA_BLANK_N, VGA_SYNC_N, VGA_CLK);
 
 endmodule
