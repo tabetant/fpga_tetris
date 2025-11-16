@@ -78,8 +78,17 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
     reg collide; // for violations
     reg [1:0] new_rot; // target rot (rot+dRot) % 4
 
-    // linking to shape offsets
+    // VGA
 
+	output [7:0]  VGA_R;
+	output [7:0]  VGA_G;
+	output [7:0]  VGA_B;
+    output         VGA_HS;
+    output         VGA_VS;
+    output         VGA_BLANK_N;
+    output         VGA_SYNC_N;
+    output         VGA_CLK;
+				 
     // current rotation (for LOCK writes)
     wire [1:0] dx0_c, dy0_c, dx1_c, dy1_c, dx2_c, dy2_c, dx3_c, dy3_c;
 
