@@ -2,7 +2,7 @@
 
 module render_box20 (
     input  wire        CLOCK_50,
-    input  wire        resetn,      // active-high: 1 = running, 0 = reset
+    input  wire        resetn,      // active-low: 1 = running, 0 = reset
     input  wire        start,       // pulse/high to draw the box once
     input  wire [9:0]  x0,          // top-left X of box
     input  wire [8:0]  y0,          // top-left Y of box
@@ -15,14 +15,17 @@ module render_box20 (
     output wire        VGA_VS,
     output wire        VGA_BLANK_N,
     output wire        VGA_SYNC_N,
-    output wire        VGA_CLK
+    output wire        VGA_CLK,
+    output reg         done,
+    output reg         busy,
 );
     // VGA geometry for 640x480 via given vga_adapter
     localparam nX = 10;
     localparam nY = 9;
 
-    // Constant box size = 20
-    localparam [nX-1:0] BOX_SIZE = 10'd20;
+    // Cell size for Tetris
+    localparam [nX-1:0] BOX_W = 10'd64;
+    localparam [nY-1:0] BOX_H = 9'd24;
 
     // Offsets within the box
     wire [nX-1:0] xc;
@@ -59,29 +62,39 @@ module render_box20 (
         .Q      (yc)
     );
 
-    // FSM next-state logic
-    always @(*) begin
+    always @(*) begin    
         case (state)
-            S_IDLE:
-                // wait for start to begin drawing
-                next_state = start ? S_DRAWX : S_IDLE;
-
-            S_DRAWX:
-                // sweep across one row
-                next_state = (xc < BOX_SIZE-1) ? S_DRAWX : S_NEXTY;
-
-            S_NEXTY:
-                // move to next row or finish
-                next_state = (yc < BOX_SIZE-1) ? S_DRAWX : S_DONE;
-
-            S_DONE:
-                // done: go idle; box stays in VRAM
-                next_state = S_IDLE;
-
-            default:
-                next_state = S_IDLE;
+            S_IDLE:   next_state = start ? S_DRAWX : S_IDLE;
+            S_DRAWX:  next_state = (xc < BOX_W-1) ? S_DRAWX : S_NEXTY;
+            S_NEXTY:  next_state = (yc < BOX_H-1) ? S_DRAWX : S_DONE;
+            S_DONE:   next_state = S_IDLE;
+            default:  next_state = S_IDLE;
         endcase
     end
+
+    always @(*) 
+    begin
+    // defaults
+    write = 1'b0; L_xc = 1'b0; L_yc = 1'b0; E_xc = 1'b0; E_yc = 1'b0;
+    done  = 1'b0; busy = 1'b0;
+
+    case (state)
+        S_IDLE: begin
+            if (start) begin L_xc = 1'b1; L_yc = 1'b1; end
+        end
+        S_DRAWX: begin
+            write = 1'b1; E_xc = 1'b1; busy = 1'b1;
+        end
+        S_NEXTY: begin
+            L_xc = 1'b1; E_yc = 1'b1; busy = 1'b1;
+        end
+        S_DONE: begin
+            done = 1'b1; // 1-cycle pulse
+        end
+    endcase
+    end
+
+
 
     // FSM outputs
     always @(*) begin
