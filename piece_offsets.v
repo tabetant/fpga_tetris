@@ -2,10 +2,10 @@ module tetris_piece_offsets (
     input  wire [2:0]shape_id,  // O = 0 I = 1 ( for now to limit scope )
     input  wire [1:0] rot,       // 0..3 = {0°, 90°, 180°, 270°}, clockwise
 
-    output reg  [1:0] dx0, dy0,
-    output reg  [1:0] dx1, dy1,
-    output reg  [1:0] dx2, dy2,
-    output reg  [1:0] dx3, dy3
+    output reg  signed [1:0] dx0, dy0,
+    output reg  signed [1:0] dx1, dy1,
+    output reg signed  [1:0] dx2, dy2,
+    output reg  signed [1:0] dx3, dy3
 );
 
  always @* begin
