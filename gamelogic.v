@@ -89,15 +89,17 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
     output         VGA_SYNC_N;
     output         VGA_CLK;
 
-	// Absolute cell coords (use current rotation for what’s currently on screen)
-	wire [4:0] ax0 = {1'b0, piece_x} + {3'b000, dx0_c};
-	wire [4:0] ay0 = {1'b0, piece_y} + {4'b0000, dy0_c};
-	wire [4:0] ax1 = {1'b0, piece_x} + {3'b000, dx1_c};
-	wire [4:0] ay1 = {1'b0, piece_y} + {4'b0000, dy1_c};
-	wire [4:0] ax2 = {1'b0, piece_x} + {3'b000, dx2_c};
-	wire [4:0] ay2 = {1'b0, piece_y} + {4'b0000, dy2_c};
-	wire [4:0] ax3 = {1'b0, piece_x} + {3'b000, dx3_c};
-	wire [4:0] ay3 = {1'b0, piece_y} + {4'b0000, dy3_c};
+	// X (10 bits): *64 = <<6
+	wire [9:0] px0 = {ax0[3:0], 6'b0};
+	wire [9:0] px1 = {ax1[3:0], 6'b0};
+	wire [9:0] px2 = {ax2[3:0], 6'b0};
+	wire [9:0] px3 = {ax3[3:0], 6'b0};
+
+	// Y (9 bits): *24 = <<4 + <<3  (i.e., 16 + 8)
+	wire [8:0] py0 = {ay0[4:0], 4'b0} + {ay0[4:0], 3'b0};
+	wire [8:0] py1 = {ay1[4:0], 4'b0} + {ay1[4:0], 3'b0};
+	wire [8:0] py2 = {ay2[4:0], 4'b0} + {ay2[4:0], 3'b0};
+	wire [8:0] py3 = {ay3[4:0], 4'b0} + {ay3[4:0], 3'b0};
 
 	wire [8:0] piece_color = 9'b111_000_111; // magenta
 
