@@ -26,12 +26,12 @@
 // 3 - if all conditions keep collide = 0 , accept the move:
 // piece_x += dX, piece_y += dY, rot = new_rot
 
-module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tick_gravity, board_rdata, board_rx, board_ry, board_we, board_wx, board_wy, board_wdata, score, VGA_R, VGA_G, VGA_B, VGA_HS, VGA_V, VGA_BLANK_N, VGA_SYNC_N, VGA_CLK;
+module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tick_gravity, board_rdata, board_rx, board_ry, board_we, board_wx, board_wy, board_wdata, score, VGA_R, VGA_G, VGA_B, VGA_HS, VGA_VS, VGA_BLANK_N, VGA_SYNC_N, VGA_CLK);
     input CLOCK_50, resetn;
 
     // testing + sanity check
     output [9:0] LEDR;
-
+	
     // input debounced clean pulses
     input left_final, right_final, rot_final;
 
@@ -88,7 +88,55 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
     output         VGA_BLANK_N;
     output         VGA_SYNC_N;
     output         VGA_CLK;
-				 
+
+	// Absolute cell coords (use current rotation for what’s currently on screen)
+	wire [4:0] ax0 = {1'b0, piece_x} + {3'b000, dx0_c};
+	wire [4:0] ay0 = {1'b0, piece_y} + {4'b0000, dy0_c};
+	wire [4:0] ax1 = {1'b0, piece_x} + {3'b000, dx1_c};
+	wire [4:0] ay1 = {1'b0, piece_y} + {4'b0000, dy1_c};
+	wire [4:0] ax2 = {1'b0, piece_x} + {3'b000, dx2_c};
+	wire [4:0] ay2 = {1'b0, piece_y} + {4'b0000, dy2_c};
+	wire [4:0] ax3 = {1'b0, piece_x} + {3'b000, dx3_c};
+	wire [4:0] ay3 = {1'b0, piece_y} + {4'b0000, dy3_c};
+
+	wire [8:0] piece_color = 9'b111_000_111; // magenta
+
+	render_box20 RENDER (
+    	.CLOCK_50    (CLOCK_50),
+    	.resetn      (resetn),
+    	.start       (kick),
+    	.x0          (x0),
+    	.y0          (y0),
+    	.color       (piece_color),
+    	.done        (done),
+    	.busy        (busy),
+
+    	.VGA_R       (VGA_R),
+    	.VGA_G       (VGA_G),
+    	.VGA_B       (VGA_B),
+    	.VGA_HS      (VGA_HS),
+    	.VGA_VS      (VGA_VS),
+    	.VGA_BLANK_N (VGA_BLANK_N),
+    	.VGA_SYNC_N  (VGA_SYNC_N),
+    	.VGA_CLK     (VGA_CLK)
+	);
+
+	reg  [1:0] draw_phase;     // 0..3
+	reg        kick;           // 1-cycle pulse to start a draw
+	wire       done, busy;     // from painter
+
+	reg [9:0] x0;	
+	reg [8:0] y0;
+
+	always @* begin
+    	case (draw_phase)
+        	2'd0: begin x0 = cellX_to_px(ax0[3:0]); y0 = cellY_to_py(ay0[4:0]); end
+        	2'd1: begin x0 = cellX_to_px(ax1[3:0]); y0 = cellY_to_py(ay1[4:0]); end
+        	2'd2: begin x0 = cellX_to_px(ax2[3:0]); y0 = cellY_to_py(ay2[4:0]); end
+        	default: begin x0 = cellX_to_px(ax3[3:0]); y0 = cellY_to_py(ay3[4:0]); end
+    	endcase
+	end
+	
     // current rotation (for LOCK writes)
     wire [1:0] dx0_c, dy0_c, dx1_c, dy1_c, dx2_c, dy2_c, dx3_c, dy3_c;
 
@@ -255,6 +303,8 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
     begin
         if(!resetn)
         begin
+			draw_phase <= 2'd0;
+			kick       <= 1'b0;
             lock_phase <= 0;
             state <= S_IDLE;
             piece_x <= 0;
@@ -307,15 +357,25 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
                 if (state == S_LOCK)
                 begin
                     if (lock_phase == 2'd3) 
+					begin
                         lock_phase <= 2'd0;
                         if (score != 5'd31) 
                             score <= score + 5'd1;
                         else
                             score <= score;  // hold at max
+					end
                     else 
                         lock_phase <= lock_phase + 2'd1; 
                 end   
         end
+		if (!busy && !kick) begin
+	    // launch a draw for current block
+    	kick <= 1'b1;
+		end else if (kick) begin
+    	kick <= 1'b0;          // drop the pulse next cycle
+		end else if (done) begin
+    	draw_phase <= (draw_phase == 2'd3) ? 2'd0 : draw_phase + 2'd1;
+end
     end
     assign LEDR[7:5] = state;
     assign LEDR[0]   = move_accept;
