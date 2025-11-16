@@ -8,16 +8,19 @@ module tetris(SW, KEY, CLOCK_50, LEDR);
     input [9:0] SW;
     input [3:0] KEY;
     input CLOCK_50;
-	 output [9:0] LEDR;
+	output [9:0] LEDR;
 
     // sync active low reset
     wire resetn;
     assign resetn = KEY[3];
 
+    wire blink;
+    wire [4:0] score;
+
     // frame rate for inputs (100 Hz)
-    wire tick_input, tick_gravity, blink_g;
-    tick_i in(.CLOCK_50(CLOCK_50), .resetn(resetn), .tick_input(tick_input)); // from ticks.v file
-    tick_g gravity(.CLOCK_50(CLOCK_50), .resetn(resetn), .tick_gravity(tick_gravity), .blink(blink_g));
+    wire tick_input, tick_gravity;
+    tick_i in(CLOCK_50, resetn, tick_input); // from ticks.v file
+    tick_g gravity(CLOCK_50, resetn, score, tick_gravity, blink);
 	 
     // move left, move right, rotate clockwise
     wire left, right, rotate;
@@ -52,5 +55,14 @@ module tetris(SW, KEY, CLOCK_50, LEDR);
 
     // left_final, right_final, rot_final will feed our FSM
 	 
-	 gamelogic GAME(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tick_gravity, blink_g);
+     // --- Board RAM wires ---
+    wire        board_we;
+    wire [3:0]  board_wx, board_rx;
+    wire [4:0]  board_wy, board_ry;
+    wire        board_wdata;
+    wire        board_rdata;
+
+board10x20 BOARD (CLOCK_50, resetn, board_we, board_wx, board_wy, board_wdata, board_rx, board_ry, board_rdata);
+gamelogic GAME(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tick_gravity, board_rdata, board_rx, board_ry, board_we, board_wx, board_wy, board_wdata, score);
+
 endmodule
