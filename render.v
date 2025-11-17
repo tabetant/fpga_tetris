@@ -17,7 +17,7 @@ module render_box20 (
     output wire        VGA_SYNC_N,
     output wire        VGA_CLK,
     output reg         done,
-    output reg         busy,
+    output reg         busy
 );
     // VGA geometry for 640x480 via given vga_adapter
     localparam nX = 10;
@@ -92,44 +92,6 @@ module render_box20 (
             done = 1'b1; // 1-cycle pulse
         end
     endcase
-    end
-
-
-
-    // FSM outputs
-    always @(*) begin
-        // defaults
-        write = 1'b0;
-        L_xc  = 1'b0;
-        L_yc  = 1'b0;
-        E_xc  = 1'b0;
-        E_yc  = 1'b0;
-
-        case (state)
-            S_IDLE: begin
-                // when we (re)start, reset both offsets to 0
-                if (start) begin
-                    L_xc = 1'b1;
-                    L_yc = 1'b1;
-                end
-            end
-
-            S_DRAWX: begin
-                // write one pixel and advance xc
-                write = 1'b1;
-                E_xc  = 1'b1;
-            end
-
-            S_NEXTY: begin
-                // end of row: reset xc, increment yc
-                L_xc = 1'b1;
-                E_yc = 1'b1;
-            end
-
-            S_DONE: begin
-                // nothing; VRAM keeps the box
-            end
-        endcase
     end
 
     // FSM state register
