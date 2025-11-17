@@ -115,7 +115,7 @@ reg [4:0]  clr_y;     // 0..19
 
 always @(posedge CLOCK_50 or negedge resetn) begin
   if (!resetn) begin
-    clearing     <= 1'b1;
+    clearing     <= 1'b0;
     first_draw   <= 1'b0;
     clr_x        <= 4'd0;
     clr_y        <= 5'd0;
@@ -125,9 +125,6 @@ always @(posedge CLOCK_50 or negedge resetn) begin
     draw_seq     <= 2'd0;
     prev_x       <= 4'd0;
     prev_y       <= 5'd0;
-	x0           <= 10'd0;      
-    y0           <= 9'd0;      
-    paint_color  <= 9'd0;       // bg at reset
   end else begin
     // edge capture
     prev_accept <= move_accept;
