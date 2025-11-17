@@ -67,9 +67,13 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
 
     // lock state
     reg [1:0] lock_i;
- 
+
+	reg signed [2:0] dX_lat, dY_lat;
+	reg              want_rot_lat;
+	reg       [1:0]  new_rot_lat;
+	
     // move logic
-    output reg move_accept; // set in "fall", checked before accepting move at clock cycle
+    output move_accept; // set in "fall", checked before accepting move at clock cycle
     reg want_left, want_right, want_rot, want_grav;
     reg [1:0] dRot;
     reg have_action;
@@ -165,7 +169,6 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
         want_rot = 0;
         want_grav = 0;
         dRot = 0;
-        move_accept = 0;
         collide = 0;
         new_rot = rot;
         board_rx = piece_x;
@@ -213,14 +216,14 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
                 new_rot = (rot + dRot) & 2'b11;
                 have_action = (want_left || want_right || want_rot || want_grav);
                 collide = collide_bounds;
-                move_accept = have_action & ~collide;
-                if (have_action) 
-                begin
-                    if (collide)
-                        next_state = S_LOCK; 
-                    else 
-                        move_accept = 1'b1; // normal move
-                end
+                if (have_action) begin
+    			if (collide) begin
+        			if (want_grav)
+            				next_state = S_LOCK;   // landed on something or floor
+        			else
+            		next_state = S_FALL;   // ignore side/rotate collisions
+    			end
+				end
             end
             S_LOCK: // write the 4 blocks of active piece into board memory
             begin
@@ -252,6 +255,10 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
     begin
         if(!resetn)
         begin
+    		dX_lat        <= 3'sd0;
+    		dY_lat        <= 3'sd0;
+    		want_rot_lat  <= 1'b0;
+    		new_rot_lat   <= 2'd0;
 			move_commit <= 1'b0;
             lock_phase <= 0;
             state <= S_IDLE;
@@ -280,11 +287,15 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
             state <= next_state;
 			if (state == S_FALL && will_move) begin
       			move_commit <= 1'b1;       // fire the commit pulse
+				dX_lat       <= dX;        // latch deltas
+      			dY_lat       <= dY;
+      			want_rot_lat <= want_rot;
+      			new_rot_lat  <= new_rot;
     		end
 			if (move_commit) begin
-      			piece_x <= piece_x + dX;
-      			piece_y <= piece_y + dY;
-      			if (want_rot) rot <= new_rot;
+      			piece_x <= piece_x + dX_lat;
+     	 		piece_y <= piece_y + dY_lat;
+      			if (want_rot_lat) rot <= new_rot_lat;
     		end
                 if(state == S_SPAWN)
                 begin
@@ -292,13 +303,6 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
                     rot <= 0;
                     piece_x <= spawn_x;
                     piece_y <= spawn_y;
-                end
-                else if(move_accept)   
-                begin
-                    piece_x <= piece_x + dX;
-                    piece_y <= piece_y + dY;
-                    if(want_rot) 
-                        rot <= new_rot;
                 end
                 if(state == S_FALL && next_state == S_LOCK)
                 begin
@@ -329,6 +333,7 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
         end
 end
     end
+	assign move_accept = move_commit; 
     assign LEDR[7:5] = state;
     assign LEDR[0]   = move_accept;
     assign LEDR[1]   = collide;
