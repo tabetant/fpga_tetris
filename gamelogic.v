@@ -148,7 +148,6 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
 	wire signed [6:0] ty2_s = piece_y_s + dY_s + $signed({{3{dy2_t[3]}}, dy2_t});
 	wire signed [6:0] ty3_s = piece_y_s + dY_s + $signed({{3{dy3_t[3]}}, dy3_t});
 
-	reg collide_bounds;
 	always @* begin
   		collide_bounds = 1'b0;
   		// X in [0..9], Y in [0..19]
