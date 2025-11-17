@@ -112,6 +112,14 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
         .dx3(dx3_t), .dy3(dy3_t)
     );
 
+	// pick ONE block of the current tetromino to display (here: block #0)
+	// sign-extend dx,dy then add to anchor (piece_x,piece_y)
+	wire [4:0] disp_x5 = {1'b0, piece_x} + {{1{dx0_c[3]}}, dx0_c};  // 5-bit 0..19 range safe
+	wire [5:0] disp_y6 = {1'b0, piece_y} + {{2{dy0_c[3]}}, dy0_c};  // 6-bit 0..39 range safe
+
+	// clamp to board just in case (keeps numbers in range the painter expects)
+	wire [3:0] disp_x = (disp_x5 > 5'd9)  ? 4'd9  : disp_x5[3:0];
+	wire [4:0] disp_y = (disp_y6 > 6'd19) ? 5'd19 : disp_y6[4:0];
 
     // for S_LOCK
     reg [1:0] lock_phase;   // 0..3
@@ -277,8 +285,8 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
         else
         begin
 			move_commit <= 1'b0;
-            cur_x <= piece_x;
-            cur_y <= piece_y;
+            cur_x <= disp_x;
+            cur_y <= disp_y;
             state <= next_state;
 			if (state == S_FALL && will_move) begin
       			move_commit <= 1'b1;       // fire the commit pulse
@@ -332,4 +340,6 @@ end
     assign LEDR[0]   = move_accept;
     assign LEDR[1] = have_action & collide;
     assign LEDR[2]   = tick_gravity;
+	assign LEDR[8]   = rot_final;  // pulses when rotate button is accepted at input stage
+	assign LEDR[4:3] = rot;        // shows 00→01→10→11 as you rotate
 endmodule
