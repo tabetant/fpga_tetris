@@ -114,8 +114,8 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
 
 	// pick ONE block of the current tetromino to display (here: block #0)
 	// sign-extend dx,dy then add to anchor (piece_x,piece_y)
-	wire [4:0] disp_x5 = {1'b0, piece_x} + {{1{dx0_c[3]}}, dx0_c};  // 5-bit 0..19 range safe
-	wire [5:0] disp_y6 = {1'b0, piece_y} + {{2{dy0_c[3]}}, dy0_c};  // 6-bit 0..39 range safe
+	wire [4:0] disp_x5 = {1'b0, piece_x} + {{1{dx0_c[3]}}, dx1_c};  // 5-bit 0..19 range safe
+	wire [5:0] disp_y6 = {1'b0, piece_y} + {{2{dy0_c[3]}}, dy1_c};  // 6-bit 0..39 range safe
 
 	// clamp to board just in case (keeps numbers in range the painter expects)
 	wire [3:0] disp_x = (disp_x5 > 5'd9)  ? 4'd9  : disp_x5[3:0];
@@ -267,7 +267,7 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
             piece_x <= 0;
             piece_y <= 0;
             rot <= 0;
-            shape_id <= 0;
+            shape_id <= 3'd1
             lock_i <= 0;
 				/*
             board_we <= 0;
@@ -301,7 +301,7 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
     		end
                 if(state == S_SPAWN)
                 begin
-                    shape_id <= 0;
+                    shape_id <= 3'd1;
                     rot <= 0;
                     piece_x <= spawn_x;
                     piece_y <= spawn_y;
