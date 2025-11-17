@@ -5,20 +5,20 @@
 // -> pending_event (re-timed to tick_input; max 1 action per frame)
 // outputs from the top will be used by FSM: left_final, right_final, rot_final
 
-module tetris(SW, KEY, CLOCK_50, LEDR, VGA_R, VGA_G, VGA_B, VGA_HS, VGA_V, VGA_BLANK_N, VGA_SYNC_N, VGA_CLK);
+module tetris(SW, KEY, CLOCK_50, LEDR, VGA_R, VGA_G, VGA_B, VGA_HS, VGA_VS, VGA_BLANK_N, VGA_SYNC_N, VGA_CLK);
     input [9:0] SW;
     input [3:0] KEY;
     input CLOCK_50;
 	output [9:0] LEDR;
 
-	output wire [7:0]  VGA_R,
-    output wire [7:0]  VGA_G,
-    output wire [7:0]  VGA_B,
-    output wire        VGA_HS,
-    output wire        VGA_VS,
-    output wire        VGA_BLANK_N,
-    output wire        VGA_SYNC_N,
-    output wire        VGA_CLK
+	output wire [7:0]  VGA_R;
+    output wire [7:0]  VGA_G;
+    output wire [7:0]  VGA_B;
+    output wire        VGA_HS;
+    output wire        VGA_VS;
+    output wire        VGA_BLANK_N;
+    output wire        VGA_SYNC_N;
+    output wire        VGA_CLK;
 	
     // sync active low reset
     wire resetn;
@@ -72,7 +72,64 @@ module tetris(SW, KEY, CLOCK_50, LEDR, VGA_R, VGA_G, VGA_B, VGA_HS, VGA_V, VGA_B
     wire        board_wdata;
     wire        board_rdata;
 
-board10x20 BOARD (CLOCK_50, resetn, board_we, board_wx, board_wy, board_wdata, board_rx, board_ry, board_rdata);
-	gamelogic GAME(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tick_gravity, board_rdata, board_rx, board_ry, board_we, board_wx, board_wy, board_wdata, score, VGA_R, VGA_G, VGA_B, VGA_HS, VGA_V, VGA_BLANK_N, VGA_SYNC_N, VGA_CLK);
+	wire [8:0] piece_color = 9'b111_000_111; // magenta
+
+    wire [3:0] cur_x;
+    wire [4:0] cur_y;
+    wire move_accept;
+    board10x20 BOARD (CLOCK_50, resetn, board_we, board_wx, board_wy, board_wdata, board_rx, board_ry, board_rdata);    
+	gamelogic GAME(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tick_gravity, board_rdata, board_rx, board_ry, board_we, board_wx, board_wy, board_wdata, score, cur_x, cur_y, move_accept);
+
+    wire [9:0] px = cur_x * 10'd64; // 0..576
+    wire [8:0] py = cur_y * 9'd24;  // 0..456
+
+	reg        kick;           // 1-cycle pulse to start a draw
+	wire       done, busy;     // from painter
+
+	reg [9:0] x0;	
+	reg [8:0] y0;
+
+	always @* begin
+        x0 = {cur_x, 6'b0};                    // x * 64
+        y0 = {cur_y, 4'b0} + {cur_y, 3'b0};    // y * 24  (<<4 + <<3)
+    end
+
+    reg prev_accept, prev_tick;
+    reg kick;                 // 1-cycle start pulse
+
+    wire new_tick   = tick_gravity & ~prev_tick;
+    wire render_start = (new_accept | new_tick) & ~busy;
+
+    always @(posedge CLOCK_50 or negedge resetn) begin
+        if (!resetn) begin
+            prev_accept <= 1'b0;
+            prev_tick   <= 1'b0;
+            kick        <= 1'b0;
+        end else begin
+            prev_accept <= move_accept;
+            prev_tick   <= tick_gravity;
+            kick        <= render_start;  // one-cycle pulse
+        end
+    end
+
+    render_box20 RENDER (
+    	.CLOCK_50    (CLOCK_50),
+    	.resetn      (resetn),
+    	.start       (kick),
+    	.x0          (x0),
+    	.y0          (y0),
+    	.color       (piece_color),
+    	.done        (done),
+    	.busy        (busy),
+
+    	.VGA_R       (VGA_R),
+    	.VGA_G       (VGA_G),
+    	.VGA_B       (VGA_B),
+    	.VGA_HS      (VGA_HS),
+    	.VGA_VS      (VGA_VS),
+    	.VGA_BLANK_N (VGA_BLANK_N),
+    	.VGA_SYNC_N  (VGA_SYNC_N),
+    	.VGA_CLK     (VGA_CLK)
+	);
 
 endmodule
