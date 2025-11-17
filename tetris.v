@@ -214,20 +214,3 @@ always @(posedge CLOCK_50 or negedge resetn) begin
     	.VGA_CLK     (VGA_CLK)
 	);
 endmodule
-    	.CLOCK_50    (CLOCK_50),
-    	.resetn      (resetn),
-    	.start       (kick),
-    	.x0          (x0),
-    	.y0          (y0),
-    	.color       (paint_color),
-    	.done        (done),
-    	.busy        (busy),
-
-    	.VGA_R       (VGA_R),
-    	.VGA_G       (VGA_G),
-    	.VGA_B       (VGA_B),
-    	.VGA_HS      (VGA_HS),
-    	.VGA_VS      (VGA_VS),
-    	.VGA_BLANK_N (VGA_BLANK_N),
-    	.VGA_SYNC_N  (VGA_SYNC_N),
-    	.VGA_CLKz
