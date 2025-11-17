@@ -122,42 +122,33 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
 
     reg collide_bounds;
 
-    wire [4:0] base_x = {1'b0, piece_x};
-    wire [5:0] base_y = {1'b0, piece_y};
+   wire signed [5:0] piece_x_s = $signed({1'b0, piece_x}); // 0..9 -> 0..9
+	wire signed [6:0] piece_y_s = $signed({2'b00, piece_y}); // 0..19
 
-    wire [4:0] bx0 = base_x + {{1{dx0_t[3]}}, dx0_t};
-    wire [4:0] bx1 = base_x + {{1{dx1_t[3]}}, dx1_t};
-    wire [4:0] bx2 = base_x + {{1{dx2_t[3]}}, dx2_t};
-    wire [4:0] bx3 = base_x + {{1{dx3_t[3]}}, dx3_t};
+	// Proposed deltas as signed (latched combinationally in S_FALL)
+	wire signed [5:0] dX_s = $signed({{3{dX[2]}}, dX}); // -4..+3
+	wire signed [6:0] dY_s = $signed({{4{dY[2]}}, dY}); // -4..+3
 
-    wire [5:0] by0 = base_y + {{2{dy0_t[3]}}, dy0_t};
-    wire [5:0] by1 = base_y + {{2{dy1_t[3]}}, dy1_t};
-    wire [5:0] by2 = base_y + {{2{dy2_t[3]}}, dy2_t};
-    wire [5:0] by3 = base_y + {{2{dy3_t[3]}}, dy3_t};
+	// Offsets for TRIAL rotation (dx*_t, dy*_t are signed [3:0])
+	wire signed [5:0] tx0_s = piece_x_s + dX_s + $signed({{2{dx0_t[3]}}, dx0_t});
+	wire signed [5:0] tx1_s = piece_x_s + dX_s + $signed({{2{dx1_t[3]}}, dx1_t});
+	wire signed [5:0] tx2_s = piece_x_s + dX_s + $signed({{2{dx2_t[3]}}, dx2_t});
+	wire signed [5:0] tx3_s = piece_x_s + dX_s + $signed({{2{dx3_t[3]}}, dx3_t});
 
-    wire under0 = want_left && (bx0 == 5'd0);
-    wire under1 = want_left && (bx1 == 5'd0);
-    wire under2 = want_left && (bx2 == 5'd0);
-    wire under3 = want_left && (bx3 == 5'd0);
+	wire signed [6:0] ty0_s = piece_y_s + dY_s + $signed({{3{dy0_t[3]}}, dy0_t});
+	wire signed [6:0] ty1_s = piece_y_s + dY_s + $signed({{3{dy1_t[3]}}, dy1_t});
+	wire signed [6:0] ty2_s = piece_y_s + dY_s + $signed({{3{dy2_t[3]}}, dy2_t});
+	wire signed [6:0] ty3_s = piece_y_s + dY_s + $signed({{3{dy3_t[3]}}, dy3_t});
 
-    wire [4:0] tx0 = bx0 + (want_right ? 5'd1 : 5'd0) - (want_left ? 5'd1 : 5'd0);
-    wire [4:0] tx1 = bx1 + (want_right ? 5'd1 : 5'd0) - (want_left ? 5'd1 : 5'd0);
-    wire [4:0] tx2 = bx2 + (want_right ? 5'd1 : 5'd0) - (want_left ? 5'd1 : 5'd0);
-    wire [4:0] tx3 = bx3 + (want_right ? 5'd1 : 5'd0) - (want_left ? 5'd1 : 5'd0);
-    
-    wire [5:0] ty0 = by0 + (want_grav ? 6'd1 : 6'd0);
-    wire [5:0] ty1 = by1 + (want_grav ? 6'd1 : 6'd0);
-    wire [5:0] ty2 = by2 + (want_grav ? 6'd1 : 6'd0);
-    wire [5:0] ty3 = by3 + (want_grav ? 6'd1 : 6'd0);   
-    
-    always@*
-    begin
-        collide_bounds = 1'b0;
-        if (under0 || tx0 > 5'd9 || ty0 > 6'd19) collide_bounds = 1'b1;
-        if (under1 || tx1 > 5'd9 || ty1 > 6'd19) collide_bounds = 1'b1;
-        if (under2 || tx2 > 5'd9 || ty2 > 6'd19) collide_bounds = 1'b1;
-        if (under3 || tx3 > 5'd9 || ty3 > 6'd19) collide_bounds = 1'b1;
-    end
+	reg collide_bounds;
+	always @* begin
+  		collide_bounds = 1'b0;
+  		// X in [0..9], Y in [0..19]
+  		if (tx0_s < 0 || tx0_s > 9 || ty0_s > 19) collide_bounds = 1'b1;
+  		if (tx1_s < 0 || tx1_s > 9 || ty1_s > 19) collide_bounds = 1'b1;
+  		if (tx2_s < 0 || tx2_s > 9 || ty2_s > 19) collide_bounds = 1'b1;
+  		if (tx3_s < 0 || tx3_s > 9 || ty3_s > 19) collide_bounds = 1'b1;
+	end
 
     always@*
     begin
@@ -335,6 +326,6 @@ end
 	assign move_accept = move_commit; 
     assign LEDR[7:5] = state;
     assign LEDR[0]   = move_accept;
-    assign LEDR[1]   = collide;
+    assign LEDR[1] = have_action & collide;
     assign LEDR[2]   = tick_gravity;
 endmodule
