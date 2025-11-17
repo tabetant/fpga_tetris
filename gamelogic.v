@@ -245,10 +245,14 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
         endcase
     end
 
+	reg move_commit;   // 1-cycle pulse aligned to state update
+	wire will_move = have_action & ~collide;
+	
     always@(posedge CLOCK_50)
     begin
         if(!resetn)
         begin
+			move_commit <= 1'b0;
             lock_phase <= 0;
             state <= S_IDLE;
             piece_x <= 0;
@@ -270,9 +274,18 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
         end
         else
         begin
+			move_commit <= 1'b0;
             cur_x <= piece_x;
             cur_y <= piece_y;
             state <= next_state;
+			if (state == S_FALL && will_move) begin
+      			move_commit <= 1'b1;       // fire the commit pulse
+    		end
+			if (move_commit) begin
+      			piece_x <= piece_x + dX;
+      			piece_y <= piece_y + dY;
+      			if (want_rot) rot <= new_rot;
+    		end
                 if(state == S_SPAWN)
                 begin
                     shape_id <= 0;
