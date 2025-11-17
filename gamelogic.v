@@ -267,7 +267,7 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
             piece_x <= 0;
             piece_y <= 0;
             rot <= 0;
-            shape_id <= 3'd1
+            shape_id <= 3'd1;
             lock_i <= 0;
 				/*
             board_we <= 0;
