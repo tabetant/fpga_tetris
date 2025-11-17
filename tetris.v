@@ -89,11 +89,6 @@ module tetris(SW, KEY, CLOCK_50, LEDR, VGA_R, VGA_G, VGA_B, VGA_HS, VGA_VS, VGA_
 	reg [9:0] x0;	
 	reg [8:0] y0;
 
-	always @* begin
-        x0 = {cur_x, 6'b0};                    // x * 64
-        y0 = {cur_y, 4'b0} + {cur_y, 3'b0};    // y * 24  (<<4 + <<3)
-    end
-
 	 // REMEMBER LAST DRAWN CELL
 	 
 	 reg [3:0] prev_x;
@@ -133,6 +128,31 @@ always @(posedge CLOCK_50 or negedge resetn) begin
 
         // default: no start
         kick <= 1'b0;
+		  if (clearing) begin
+            // only launch when painter is idle
+            if (~busy && ~kick) begin
+                x0          <= {clr_x, 6'b0};
+                y0          <= {clr_y, 4'b0} + {clr_y, 3'b0};
+                paint_color <= bg_color;
+                kick        <= 1'b1;  // one box per start
+            end else if (done) begin
+                // advance to next cell
+                if (clr_x == 4'd9) begin
+                    clr_x <= 4'd0;
+                    if (clr_y == 5'd19) begin
+                        clr_y   <= 5'd0;
+                        clearing <= 1'b0;   // finished clearing
+                        // also sync prev to current so first move erases the right cell
+                        prev_x <= cur_x;
+                        prev_y <= cur_y;
+                    end else begin
+                        clr_y <= clr_y + 5'd1;
+                    end
+                end else begin
+                    clr_x <= clr_x + 4'd1;
+                end
+            end
+		end else begin
 
         case (draw_seq)
             2'd0: begin
@@ -168,33 +188,9 @@ always @(posedge CLOCK_50 or negedge resetn) begin
 
             default: draw_seq <= 2'd0;
         endcase
-        if (clearing) begin
-            // only launch when painter is idle
-            if (~busy && ~kick) begin
-                x0          <= {clr_x, 6'b0};
-                y0          <= {clr_y, 4'b0} + {clr_y, 3'b0};
-                paint_color <= bg_color;
-                kick        <= 1'b1;  // one box per start
-            end else if (done) begin
-                // advance to next cell
-                if (clr_x == 4'd9) begin
-                    clr_x <= 4'd0;
-                    if (clr_y == 5'd19) begin
-                        clr_y   <= 5'd0;
-                        clearing <= 1'b0;   // finished clearing
-                        // also sync prev to current so first move erases the right cell
-                        prev_x <= cur_x;
-                        prev_y <= cur_y;
-                    end else begin
-                        clr_y <= clr_y + 5'd1;
-                    end
-                end else begin
-                    clr_x <= clr_x + 4'd1;
-                end
-            end
-    end
-end
-end
+		  end
+	 end
+	 end
 
 
 	 
@@ -217,5 +213,21 @@ end
     	.VGA_SYNC_N  (VGA_SYNC_N),
     	.VGA_CLK     (VGA_CLK)
 	);
-
 endmodule
+    	.CLOCK_50    (CLOCK_50),
+    	.resetn      (resetn),
+    	.start       (kick),
+    	.x0          (x0),
+    	.y0          (y0),
+    	.color       (paint_color),
+    	.done        (done),
+    	.busy        (busy),
+
+    	.VGA_R       (VGA_R),
+    	.VGA_G       (VGA_G),
+    	.VGA_B       (VGA_B),
+    	.VGA_HS      (VGA_HS),
+    	.VGA_VS      (VGA_VS),
+    	.VGA_BLANK_N (VGA_BLANK_N),
+    	.VGA_SYNC_N  (VGA_SYNC_N),
+    	.VGA_CLKz
