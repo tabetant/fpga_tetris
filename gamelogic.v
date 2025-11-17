@@ -332,7 +332,6 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
                 end   
         end
 end
-    end
 	assign move_accept = move_commit; 
     assign LEDR[7:5] = state;
     assign LEDR[0]   = move_accept;
