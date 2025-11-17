@@ -35,8 +35,8 @@ module tetris(
     tick_g gravity (CLOCK_50, resetn, score, tick_gravity, blink);
 
     // raw buttons (active low on DE1/DE2 style boards)
-    wire left_raw   = ~KEY[1];
-    wire right_raw  = ~KEY[2];
+    wire left_raw   = ~KEY[2];
+    wire right_raw  = ~KEY[1];
     wire rotate_raw = ~KEY[0];
 
     // --- Debounced, one-shot pulses, limited to tick_input ---
