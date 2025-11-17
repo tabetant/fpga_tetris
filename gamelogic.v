@@ -241,7 +241,11 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
 
 	reg move_commit;   // 1-cycle pulse aligned to state update
 	wire will_move = have_action & ~collide;
-	
+
+	// Signed next-position math to avoid unsigned wrap in piece_x/piece_y updates
+	wire signed [5:0] piece_x_next_s = $signed({1'b0, piece_x}) + $signed({{2{dX_lat[2]}}, dX_lat}); // 0..9 + (-4..+3)
+	wire signed [6:0] piece_y_next_s = $signed({2'b0, piece_y}) + $signed({{3{dY_lat[2]}}, dY_lat}); // 0..19 + (-4..+3)
+
     always@(posedge CLOCK_50)
     begin
         if(!resetn)
@@ -284,8 +288,8 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
       			new_rot_lat  <= new_rot;
     		end
 			if (move_commit) begin
-      			piece_x <= piece_x + dX_lat;
-     	 		piece_y <= piece_y + dY_lat;
+				piece_x <= piece_x_next_s[3:0];
+				piece_y <= piece_y_next_s[4:0];
       			if (want_rot_lat) rot <= new_rot_lat;
     		end
                 if(state == S_SPAWN)
