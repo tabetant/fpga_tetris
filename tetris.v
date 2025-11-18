@@ -1,9 +1,5 @@
-// top-level wiring for inputs
-// Purpose: convert physical button presses into clean, one-shot, frame-rate-limited pulses for the game FSM
-// one-shot = the signal goes high for exactly one rising edge of clock, then goes low on the next
-// per control: KEY -> invert -> synchronizer -> debouncer (5 ms) -> edge detector (rising edge, 1 clk)
-// -> pending_event (re-timed to tick_input; max 1 action per frame)
-// outputs from the top will be used by FSM: left_final, right_final, rot_final
+// Top-level: buttons -> clean pulses -> gamelogic -> painter.
+// Clearing pass is disabled on reset to avoid the blank-screen issue for M2.
 
 module tetris(
     SW, KEY, CLOCK_50, LEDR,
@@ -14,32 +10,23 @@ module tetris(
     input        CLOCK_50;
     output [9:0] LEDR;
 
-    output wire [7:0]  VGA_R;
-    output wire [7:0]  VGA_G;
-    output wire [7:0]  VGA_B;
-    output wire        VGA_HS;
-    output wire        VGA_VS;
-    output wire        VGA_BLANK_N;
-    output wire        VGA_SYNC_N;
-    output wire        VGA_CLK;
+    output wire [7:0]  VGA_R, VGA_G, VGA_B;
+    output wire        VGA_HS, VGA_VS, VGA_BLANK_N, VGA_SYNC_N, VGA_CLK;
 
-    // sync active-low reset
     wire resetn = KEY[3];
 
-    wire blink;
+    // ticks
     wire [4:0] score;
-
-    // frame rates
     wire tick_input, tick_gravity;
-    tick_i in      (CLOCK_50, resetn, tick_input);               // 100 Hz input tick
-    tick_g gravity (CLOCK_50, resetn, score, tick_gravity, blink);
+    tick_i in      (CLOCK_50, resetn, tick_input);
+    tick_g gravity (CLOCK_50, resetn, score, tick_gravity, /*blink*/);
 
-    // raw buttons (active low on DE1/DE2 style boards)
+    // buttons (active-low on board)
     wire left_raw   = ~KEY[2];
     wire right_raw  = ~KEY[1];
     wire rotate_raw = ~KEY[0];
 
-    // --- Debounced, one-shot pulses, limited to tick_input ---
+    // debounced, one-shot, tick-limited
     wire left_sync,  left_level,  left_pulse,  left_final;
     wire right_sync, right_level, right_pulse, right_final;
     wire rot_sync,   rot_level,   rot_pulse,   rot_final;
@@ -59,32 +46,18 @@ module tetris(
     edgedetect  e_rot     (CLOCK_50, resetn, rot_level,  rot_pulse);
     pending_event p_rot   (rot_pulse,  tick_input, resetn, CLOCK_50, rot_final);
 
-    // --- Board RAM wires (stub for now) ---
+    // board wires (not used for M2; left unconnected to RAM)
     wire        board_we;
     wire [3:0]  board_wx, board_rx;
     wire [4:0]  board_wy, board_ry;
-    wire        board_wdata;
-    wire        board_rdata;
+    wire        board_wdata, board_rdata;
 
-    board10x20 BOARD (
-  .clk    (CLOCK_50),
-  .resetn (resetn),
-  .we     (board_we),
-  .wx     (board_wx),
-  .wy     (board_wy),
-  .wdata  (board_wdata),
-  .rx     (board_rx),
-  .ry     (board_ry),
-  .rdata  (board_rdata)
-    );
-
-
-    // Current active piece position from gamelogic
+    // current cell from game
     wire [3:0] cur_x;
     wire [4:0] cur_y;
     wire       move_accept;
 
-    // Game core
+    // core game (no board logic yet)
     gamelogic GAME(
         LEDR, CLOCK_50, resetn,
         left_final, right_final, rot_final,
@@ -94,88 +67,75 @@ module tetris(
         score, cur_x, cur_y, move_accept
     );
 
-    // --- Painter handshake ---
-    // render_box20 draws a 64x24 box at (x0,y0) with a given color when .start is pulsed for 1 cycle.
-    // It asserts .busy while working and raises .done for 1 cycle when finished.
-
-    reg        kick;           // 1-cycle pulse to start a draw
-    wire       done, busy;     // from painter
-
-    reg [9:0]  x0;             // pixel x  (multiple of 64)
-    reg [8:0]  y0;             // pixel y  (multiple of 24)
-    reg [8:0]  paint_color;    // 3:3:3 RGB
+    // painter handshake
+    reg        kick;
+    wire       done, busy;
+    reg [9:0]  x0;
+    reg [8:0]  y0;
+    reg [8:0]  paint_color;
 
     wire [8:0] piece_color = 9'b111_000_111; // magenta
-    wire [8:0] bg_color    = 9'd0;           // black
+    wire [8:0] bg_color    = 9'd0;
 
-    // Remember last drawn cell to erase it first
+    // remember last cell
     reg [3:0] prev_x;
     reg [4:0] prev_y;
 
-    // Simple 3-step draw FSM: 0=idle, 1=erase old, 2=draw new
+    // draw FSM
     reg [1:0] draw_seq;
 
-    // Edge-detect move_accept and tick_gravity to trigger redraws
-    reg prev_accept, prev_tick;
+    // trigger redraws
+    reg  prev_accept, prev_tick;
     wire new_accept  = move_accept  & ~prev_accept;
     wire new_tick    = tick_gravity & ~prev_tick;
     wire need_redraw = new_accept | new_tick;
 
-    // On-boot clear of whole screen (10x20 boxes), then one forced first draw
-    reg        clearing;
-    reg [3:0]  clr_x;     // 0..9
-    reg [4:0]  clr_y;     // 0..19
-    reg        first_draw;
+    // clearing disabled at reset (per your “works when clearing=0” observation)
+    reg clearing, first_draw;
+    reg [3:0] clr_x;
+    reg [4:0] clr_y;
 
-    // Painter / display sequencer
     always @(posedge CLOCK_50 or negedge resetn) begin
         if (!resetn) begin
-            // reset painter state
-            clearing     <= 1'b1;    // DO clear after reset
-            first_draw   <= 1'b0;
-            clr_x        <= 4'd0;
-            clr_y        <= 5'd0;
+            prev_accept <= 1'b0;
+            prev_tick   <= 1'b0;
 
-            prev_accept  <= 1'b0;
-            prev_tick    <= 1'b0;
+            kick        <= 1'b0;
+            draw_seq    <= 2'd0;
 
-            kick         <= 1'b0;
-            draw_seq     <= 2'd0;
+            prev_x      <= 4'd0;
+            prev_y      <= 5'd0;
 
-            prev_x       <= 4'd0;
-            prev_y       <= 5'd0;
+            x0          <= 10'd0;
+            y0          <= 9'd0;
+            paint_color <= 9'd0;
 
-            // IMPORTANT: give painter known coords & color at reset so first start is valid
-            x0           <= 10'd0;
-            y0           <= 9'd0;
-            paint_color  <= 9'd0;
+            // IMPORTANT: no full-screen clear on reset
+            clearing    <= 1'b0;
+            first_draw  <= 1'b1;  // force one immediate draw of current cell
+
+            clr_x <= 4'd0; clr_y <= 5'd0;
         end else begin
-            // edge capture for move/gravity
             prev_accept <= move_accept;
             prev_tick   <= tick_gravity;
 
-            // default: no painter start unless we set it
             kick <= 1'b0;
 
             if (clearing) begin
-                // Clear one cell when painter is idle
+                // (kept for later – not used because clearing=0 on reset)
                 if (~busy && ~kick) begin
-                    x0          <= {clr_x, 6'b0};                 // clr_x * 64
-                    y0          <= {clr_y, 4'b0} + {clr_y, 3'b0}; // clr_y * 24
+                    x0          <= {clr_x, 6'b0};
+                    y0          <= {clr_y, 4'b0} + {clr_y, 3'b0};
                     paint_color <= bg_color;
-                    kick        <= 1'b1;                          // start this box
+                    kick        <= 1'b1;
                 end else if (done) begin
-                    // advance the scanning cursor
                     if (clr_x == 4'd9) begin
                         clr_x <= 4'd0;
                         if (clr_y == 5'd19) begin
-                            // finished full clear
-                            clr_y      <= 5'd0;
+                            clr_y <= 5'd0;
                             clearing   <= 1'b0;
-                            first_draw <= 1'b1;      // force one draw after clearing
-                            // sync previous cell to current
-                            prev_x <= cur_x;
-                            prev_y <= cur_y;
+                            first_draw <= 1'b1;
+                            prev_x <= cur_x; prev_y <= cur_y;
                         end else begin
                             clr_y <= clr_y + 5'd1;
                         end
@@ -184,7 +144,6 @@ module tetris(
                     end
                 end
             end else begin
-                // One-time draw immediately after the clear finishes
                 if (first_draw && ~busy && ~kick) begin
                     x0          <= {cur_x, 6'b0};
                     y0          <= {cur_y, 4'b0} + {cur_y, 3'b0};
@@ -192,10 +151,8 @@ module tetris(
                     kick        <= 1'b1;
                     first_draw  <= 1'b0;
                 end else begin
-                    // Normal erase->draw sequence
                     case (draw_seq)
                         2'd0: begin
-                            // if a move/gravity happened, erase the old cell
                             if (need_redraw && ~busy && ~kick) begin
                                 x0          <= {prev_x, 6'b0};
                                 y0          <= {prev_y, 4'b0} + {prev_y, 3'b0};
@@ -204,9 +161,7 @@ module tetris(
                                 draw_seq    <= 2'd1;
                             end
                         end
-
                         2'd1: begin
-                            // after erase finishes, draw the new cell
                             if (done && ~busy && ~kick) begin
                                 x0          <= {cur_x, 6'b0};
                                 y0          <= {cur_y, 4'b0} + {cur_y, 3'b0};
@@ -215,16 +170,13 @@ module tetris(
                                 draw_seq    <= 2'd2;
                             end
                         end
-
                         2'd2: begin
-                            // after draw finishes, commit prev_* and go idle
                             if (done && ~busy) begin
                                 prev_x   <= cur_x;
                                 prev_y   <= cur_y;
                                 draw_seq <= 2'd0;
                             end
                         end
-
                         default: draw_seq <= 2'd0;
                     endcase
                 end
@@ -232,7 +184,7 @@ module tetris(
         end
     end
 
-    // Painter (64x24 box renderer)
+    // painter
     render_box20 RENDER (
         .CLOCK_50    (CLOCK_50),
         .resetn      (resetn),
@@ -242,7 +194,6 @@ module tetris(
         .color       (paint_color),
         .done        (done),
         .busy        (busy),
-
         .VGA_R       (VGA_R),
         .VGA_G       (VGA_G),
         .VGA_B       (VGA_B),
