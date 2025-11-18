@@ -1,18 +1,15 @@
-# Clean work
 vlib work
 vmap work work
 
-# Compile your design + offsets + TB
-# Adjust filenames if yours differ.
+# Compile (adjust filenames if needed)
 vlog +acc \
   tetris_piece_offsets.v \
   gamelogic.v \
   tb_gamelogic_m2.v
 
-# Simulate
 vsim -voptargs=+acc work.tb_gamelogic_m2
 
-# Waves of interest
+# Waves
 add wave -divider {CLOCK/RESET}
 add wave -radix unsigned sim:/tb_gamelogic_m2/CLOCK_50
 add wave sim:/tb_gamelogic_m2/resetn
@@ -31,5 +28,4 @@ add wave -radix unsigned sim:/tb_gamelogic_m2/cur_x
 add wave -radix unsigned sim:/tb_gamelogic_m2/cur_y
 add wave -radix unsigned sim:/tb_gamelogic_m2/LEDR
 
-# Run sim
 run -all
