@@ -66,6 +66,19 @@ module tetris(
     wire        board_wdata;
     wire        board_rdata;
 
+    board10x20 BOARD (
+  .clk    (CLOCK_50),
+  .resetn (resetn),
+  .we     (board_we),
+  .wx     (board_wx),
+  .wy     (board_wy),
+  .wdata  (board_wdata),
+  .rx     (board_rx),
+  .ry     (board_ry),
+  .rdata  (board_rdata)
+    );
+
+
     // Current active piece position from gamelogic
     wire [3:0] cur_x;
     wire [4:0] cur_y;
