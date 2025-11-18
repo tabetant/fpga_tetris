@@ -1,376 +1,228 @@
-// board size: 10 cols (0 <= x <= 9) * 20 rows (0 <= y <= 19)
-// origin: top-left cell (ORIGIN_X = 0, ORIGIN_Y = 0)
-// y increases downward: gravity = y + 1
-// screen 640 x 480 (0 <= px_x <= 639, 0 <= px_y <= 479)
-// CELL_W = 640 / 10 = 64 px
-// CELL_H = 480 / 20 = 24 px
-// px_left = ORIGIN_X + x * CELL_W
-// px_top = ORIGIN_Y + y * CELL_H
-// ORIGIN (x = 0, y = 0) maps to pixels [0:63]x[0:23]
-// BOTTOM RIGHT (x = 9, y = 19) maps to pixels [576:639]x[456:479]
-// proposed moves: (dX, dY, dRot)
-// left (-1,0,0) ; right (+1,0,0); rotate(0,0, 1 mod 4); gravity (0, +1, 0)
-// need a lookup table for the shapes: offsets[shape_id][rot][0:3] = (dx, dy)
-// for each shape, have 4 diff rotations (1 at 0 deg (default), at 90, at 180, then back to 0 (hence the mod 4))
-// CLOCKWISE ROTATION
-// for rotation: 1 mod 4 means we go to the next rotation state, then wrap around at 4 (4 rotation states)
-// before making a move: (for 0 <= i <= 3)
-// 1 - compute target cell: 
-// new_rot = (rot + dRot) mod 4
-// (dx[i], dy[i]) = offsets[shape_id][new_rot][i]
-// tx[i] = piece_x + dX + dx[i]
-// ty[i] = piece_y + dY + dy[i]
-// 2 - bounds check
-// if tx < 0 | tx > 63 | ty > 23 => collide = 1 (illegal)
-// if read_cell(, ty) == 1, collide == 1
-// 3 - if all conditions keep collide = 0 , accept the move:
-// piece_x += dX, piece_y += dY, rot = new_rot
+// Minimal Milestone-2 gamelogic: movement + bounds-only collision, no board usage.
 
-module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tick_gravity, board_rdata, board_rx, board_ry, board_we, board_wx, board_wy, board_wdata, score, cur_x, cur_y, move_accept);
+module gamelogic(
+    LEDR, CLOCK_50, resetn,
+    left_final, right_final, rot_final,
+    tick_gravity,
+    // board interface kept for compatibility but unused here
+    board_rdata, board_rx, board_ry,
+    board_we, board_wx, board_wy, board_wdata,
+    score, cur_x, cur_y, move_accept
+);
     input CLOCK_50, resetn;
-
-    // testing + sanity check
     output [9:0] LEDR;
-	
-    // input debounced clean pulses
+
     input left_final, right_final, rot_final;
+    input tick_gravity;
 
-    input tick_gravity; // gravity timer
-
-    // board reading
-	 
-    input board_rdata; // 1 if (board_rx, board_ry) is occupied
+    // board (unused for M2)
+    input        board_rdata;
     output reg [3:0] board_rx;
     output reg [4:0] board_ry;
+    output reg       board_we;
+    output reg [3:0] board_wx;
+    output reg [4:0] board_wy;
+    output reg       board_wdata;
+
     output reg [4:0] score;
 
-    // board writing
-    output reg board_we; // 1-cycle write enable
-    output reg [3:0] board_wx; // writing X address
-    output reg [4:0] board_wy; // writing Y address
-    output reg board_wdata; // 1 to set cell occupied
-	 
+    // visible cell for painter
+    output reg [3:0] cur_x;  // 0..9
+    output reg [4:0] cur_y;  // 0..19
 
-    // FSM states
-    parameter S_IDLE = 3'd0, S_SPAWN = 3'd1, S_FALL = 3'd2, S_LOCK = 3'd3, S_CLEAR = 3'd4;
+    output move_accept;
+
+    // FSM
+    localparam S_IDLE=3'd0, S_SPAWN=3'd1, S_FALL=3'd2, S_LOCK=3'd3, S_CLEAR=3'd4;
     reg [2:0] state, next_state;
 
-    // tetromino shape and rotation 
-    reg [1:0] rot;
-    reg [2:0] shape_id;
+    // piece state
+    reg  [1:0] rot;
+    reg  [2:0] shape_id;
+    reg  [3:0] piece_x;        // 0..9
+    reg  [4:0] piece_y;        // 0..19
+    reg  [3:0] spawn_x;
+    reg  [4:0] spawn_y;
 
-    // coordinate logic
-    reg [3:0] spawn_x;
-    reg [4:0] spawn_y;
-    reg [3:0] piece_x; // 0 to 9
-    reg [4:0] piece_y; // 0 to 19
-
-    // lock state
-    reg [1:0] lock_i;
-
-	reg signed [2:0] dX_lat, dY_lat;
-	reg              want_rot_lat;
-	reg       [1:0]  new_rot_lat;
-	
-    // move logic
-    output move_accept; // set in "fall", checked before accepting move at clock cycle
-    reg want_left, want_right, want_rot, want_grav;
-    reg [1:0] dRot;
-    reg have_action;
+    // intent
     reg signed [2:0] dX, dY;
+    reg        want_left, want_right, want_rot, want_grav;
+    reg  [1:0] dRot;
+    reg  [1:0] new_rot;
+    reg        have_action;
 
-    reg collide; // for violations
-    reg [1:0] new_rot; // target rot (rot+dRot) % 4
+    // move commit pipeline
+    reg signed [2:0] dX_lat, dY_lat;
+    reg        want_rot_lat;
+    reg  [1:0] new_rot_lat;
+    reg        move_commit;
+    wire       will_move;
 
-    // VGA
-
-    output reg [3:0] cur_x;
-    output reg [4:0] cur_y;
-	
-    // current rotation (for LOCK writes)
+    // offsets module (provided elsewhere)
     wire signed [3:0] dx0_c, dy0_c, dx1_c, dy1_c, dx2_c, dy2_c, dx3_c, dy3_c;
-
-    // trial rotation (for collision test of this move)
     wire signed [3:0] dx0_t, dy0_t, dx1_t, dy1_t, dx2_t, dy2_t, dx3_t, dy3_t;
 
-    tetris_piece_offsets OFF_CUR (
-        .shape_id (shape_id),
-        .rot      (rot),  
+    tetris_piece_offsets OFF_CUR(
+        .shape_id(shape_id), .rot(rot),
         .dx0(dx0_c), .dy0(dy0_c),
         .dx1(dx1_c), .dy1(dy1_c),
         .dx2(dx2_c), .dy2(dy2_c),
         .dx3(dx3_c), .dy3(dy3_c)
     );
-    
-    // trial rotation (for collision checks)
-    tetris_piece_offsets OFF_TRY (
-        .shape_id (shape_id),
-        .rot      (new_rot),  
+
+    tetris_piece_offsets OFF_TRY(
+        .shape_id(shape_id), .rot(new_rot),
         .dx0(dx0_t), .dy0(dy0_t),
         .dx1(dx1_t), .dy1(dy1_t),
         .dx2(dx2_t), .dy2(dy2_t),
         .dx3(dx3_t), .dy3(dy3_t)
     );
 
-	// pick ONE block of the current tetromino to display (here: block #0)
-	// sign-extend dx,dy then add to anchor (piece_x,piece_y)
-	wire [4:0] disp_x5 = {1'b0, piece_x} + {{1{dx1_c[3]}}, dx1_c};  // 5-bit 0..19 range safe
-	wire [5:0] disp_y6 = {1'b0, piece_y} + {{2{dy1_c[3]}}, dy1_c};  // 6-bit 0..39 range safe
+    // display one block of the active tetromino (block #1 here)
+    wire [4:0] disp_x5 = {1'b0,piece_x} + {{1{dx1_c[3]}}, dx1_c};
+    wire [5:0] disp_y6 = {1'b0,piece_y} + {{2{dy1_c[3]}}, dy1_c};
+    wire [3:0] disp_x  = (disp_x5 > 5'd9 ) ? 4'd9  : disp_x5[3:0];
+    wire [4:0] disp_y  = (disp_y6 > 6'd19) ? 5'd19 : disp_y6[4:0];
 
-	// clamp to board just in case (keeps numbers in range the painter expects)
-	wire [3:0] disp_x = (disp_x5 > 5'd9)  ? 4'd9  : disp_x5[3:0];
-	wire [4:0] disp_y = (disp_y6 > 6'd19) ? 5'd19 : disp_y6[4:0];
+    // bounds-only collision (no board)
+    wire signed [5:0] piece_x_s = $signed({1'b0, piece_x});
+    wire signed [6:0] piece_y_s = $signed({2'b00, piece_y});
+    wire signed [5:0] dX_s = $signed({{3{dX[2]}}, dX});
+    wire signed [6:0] dY_s = $signed({{4{dY[2]}}, dY});
 
-    // for S_LOCK
-    reg [1:0] lock_phase;   // 0..3
-    reg [3:0] wx_hold [0:3];
-    reg [4:0] wy_hold [0:3];
-
-    // compute target piece and check collision
+    wire signed [5:0] tx0_s = piece_x_s + dX_s + $signed({{2{dx0_t[3]}}, dx0_t});
+    wire signed [5:0] tx1_s = piece_x_s + dX_s + $signed({{2{dx1_t[3]}}, dx1_t});
+    wire signed [5:0] tx2_s = piece_x_s + dX_s + $signed({{2{dx2_t[3]}}, dx2_t});
+    wire signed [5:0] tx3_s = piece_x_s + dX_s + $signed({{2{dx3_t[3]}}, dx3_t});
+    wire signed [6:0] ty0_s = piece_y_s + dY_s + $signed({{3{dy0_t[3]}}, dy0_t});
+    wire signed [6:0] ty1_s = piece_y_s + dY_s + $signed({{3{dy1_t[3]}}, dy1_t});
+    wire signed [6:0] ty2_s = piece_y_s + dY_s + $signed({{3{dy2_t[3]}}, dy2_t});
+    wire signed [6:0] ty3_s = piece_y_s + dY_s + $signed({{3{dy3_t[3]}}, dy3_t});
 
     reg collide_bounds;
-	reg collide_board;
-	
-   wire signed [5:0] piece_x_s = $signed({1'b0, piece_x}); // 0..9 -> 0..9
-	wire signed [6:0] piece_y_s = $signed({2'b00, piece_y}); // 0..19
+    always @* begin
+        collide_bounds = 1'b0;
+        if (tx0_s < 0 || tx0_s > 9  || ty0_s > 19) collide_bounds = 1'b1;
+        if (tx1_s < 0 || tx1_s > 9  || ty1_s > 19) collide_bounds = 1'b1;
+        if (tx2_s < 0 || tx2_s > 9  || ty2_s > 19) collide_bounds = 1'b1;
+        if (tx3_s < 0 || tx3_s > 9  || ty3_s > 19) collide_bounds = 1'b1;
+    end
 
-	// Proposed deltas as signed (latched combinationally in S_FALL)
-	wire signed [5:0] dX_s = $signed({{3{dX[2]}}, dX}); // -4..+3
-	wire signed [6:0] dY_s = $signed({{4{dY[2]}}, dY}); // -4..+3
-
-	// Offsets for TRIAL rotation (dx*_t, dy*_t are signed [3:0])
-	wire signed [5:0] tx0_s = piece_x_s + dX_s + $signed({{2{dx0_t[3]}}, dx0_t});
-	wire signed [5:0] tx1_s = piece_x_s + dX_s + $signed({{2{dx1_t[3]}}, dx1_t});
-	wire signed [5:0] tx2_s = piece_x_s + dX_s + $signed({{2{dx2_t[3]}}, dx2_t});
-	wire signed [5:0] tx3_s = piece_x_s + dX_s + $signed({{2{dx3_t[3]}}, dx3_t});
-
-	wire signed [6:0] ty0_s = piece_y_s + dY_s + $signed({{3{dy0_t[3]}}, dy0_t});
-	wire signed [6:0] ty1_s = piece_y_s + dY_s + $signed({{3{dy1_t[3]}}, dy1_t});
-	wire signed [6:0] ty2_s = piece_y_s + dY_s + $signed({{3{dy2_t[3]}}, dy2_t});
-	wire signed [6:0] ty3_s = piece_y_s + dY_s + $signed({{3{dy3_t[3]}}, dy3_t});
-
-	// clamp for safe board addressing (used for board read probes)
-	wire [3:0] tx0_clamp = (tx0_s < 0) ? 4'd0 : (tx0_s > 9)  ? 4'd9  : tx0_s[3:0];
-	wire [3:0] tx1_clamp = (tx1_s < 0) ? 4'd0 : (tx1_s > 9)  ? 4'd9  : tx1_s[3:0];
-	wire [3:0] tx2_clamp = (tx2_s < 0) ? 4'd0 : (tx2_s > 9)  ? 4'd9  : tx2_s[3:0];
-	wire [3:0] tx3_clamp = (tx3_s < 0) ? 4'd0 : (tx3_s > 9)  ? 4'd9  : tx3_s[3:0];
-
-	wire [4:0] ty0_clamp = (ty0_s < 0) ? 5'd0 : (ty0_s > 19) ? 5'd19 : ty0_s[4:0];
-	wire [4:0] ty1_clamp = (ty1_s < 0) ? 5'd0 : (ty1_s > 19) ? 5'd19 : ty1_s[4:0];
-	wire [4:0] ty2_clamp = (ty2_s < 0) ? 5'd0 : (ty2_s > 19) ? 5'd19 : ty2_s[4:0];
-	wire [4:0] ty3_clamp = (ty3_s < 0) ? 5'd0 : (ty3_s > 19) ? 5'd19 : ty3_s[4:0];
-
-	always @* begin
-  		collide_bounds = 1'b0;
-  		// X in [0..9], Y in [0..19]
-  		if (tx0_s < 0 || tx0_s > 9 || ty0_s > 19) collide_bounds = 1'b1;
-  		if (tx1_s < 0 || tx1_s > 9 || ty1_s > 19) collide_bounds = 1'b1;
-  		if (tx2_s < 0 || tx2_s > 9 || ty2_s > 19) collide_bounds = 1'b1;
-  		if (tx3_s < 0 || tx3_s > 9 || ty3_s > 19) collide_bounds = 1'b1;
-	end
-
-    always@*
-    begin
-		collide_board = 0;
-        dX = 0;
-        dY = 0;
-        next_state = state;
-        want_left = 0;
-        want_right = 0;
-        want_rot = 0;
-        want_grav = 0;
-        dRot = 0;
-        collide = 0;
-        new_rot = rot;
-        board_rx = piece_x;
-        board_ry = piece_y;
-        board_we = 1'b0;
+    // Next-state / intent
+    reg collide;
+    always @* begin
+        // unused board lines
+        board_we    = 1'b0;
         board_wdata = 1'b0;
-        board_wx = 4'd0;
-        board_wy = 5'd0; 
-        case(state)
-            S_IDLE: next_state = S_SPAWN;
-            S_SPAWN: 
-				begin
-                board_we = 1'b0;
-                if (collide)
-                    next_state = S_FALL; // next_state = S_GAME_OVER : to be implemented later;
-                else 
-                begin
-                    next_state = S_FALL;
-                end
-				end
-            S_FALL: 
-			begin
-                if (left_final) 
-                begin
-                    dRot = 0;
-                    want_left = 1;
-                    dX = -1;
-                end
-                else if (right_final)
-                begin
-                    dRot = 0;
-                    want_right = 1;
-                    dX = 1;
-                end
-                else if (rot_final)
-                begin
-                    want_rot = 1;
-                    dRot = 1;
-                end
-                else if(tick_gravity)
-                begin
-                    want_grav = 1;
-                    dY = 1;
-                end
-                new_rot = (rot + dRot) & 2'b11;
+        board_wx    = 4'd0;
+        board_wy    = 5'd0;
+        board_rx    = piece_x;
+        board_ry    = piece_y;
+
+        dX = 0; dY = 0; dRot = 0;
+        want_left = 0; want_right = 0; want_rot = 0; want_grav = 0;
+        new_rot   = rot;
+        collide   = 1'b0;
+        have_action = 1'b0;
+        next_state  = state;
+
+        case (state)
+            S_IDLE:  next_state = S_SPAWN;
+
+            S_SPAWN: begin
+                next_state = S_FALL;
+            end
+
+            S_FALL: begin
+                if (left_final)   begin want_left = 1; dX = -1; end
+                else if (right_final) begin want_right = 1; dX = 1; end
+                else if (rot_final)   begin want_rot = 1; dRot = 1; end
+                else if (tick_gravity)begin want_grav = 1; dY = 1; end
+
+                new_rot     = (rot + dRot) & 2'b11;
                 have_action = (want_left || want_right || want_rot || want_grav);
-				
-				// board collision
-                board_rx = tx0_clamp;
-                board_ry = ty0_clamp;
-                if (board_rdata) collide_board = 1;
+                collide     = collide_bounds; // no board yet
 
-                board_rx = tx1_clamp;
-                board_ry = ty1_clamp;
-                if (board_rdata) collide_board = 1;
-
-                board_rx = tx2_clamp;
-                board_ry = ty2_clamp;
-                if (board_rdata) collide_board = 1;
-
-                board_rx = tx3_clamp;
-                board_ry = ty3_clamp;
-                if (board_rdata) collide_board = 1;
-
-                collide = collide_bounds | collide_board;
-				
                 if (have_action) begin
-    			if (collide) begin
-        			if (want_grav)
-            				next_state = S_LOCK;   // landed on something or floor
-        			else
-            		next_state = S_FALL;   // ignore side/rotate collisions
-    			end
-				end
-            end
-            S_LOCK: // write the 4 blocks of active piece into board memory
-            begin
-                // write one cell per cycle
-                board_we = 1'b1;
-                board_wdata = 1'b1;
-                case (lock_phase)
-                    2'd0: begin board_wx = wx_hold[0]; board_wy = wy_hold[0]; end
-                    2'd1: begin board_wx = wx_hold[1]; board_wy = wy_hold[1]; end
-                    2'd2: begin board_wx = wx_hold[2]; board_wy = wy_hold[2]; end
-                    2'd3: begin board_wx = wx_hold[3]; board_wy = wy_hold[3]; end
-                endcase
-    
-                next_state = (lock_phase == 2'd3) ? S_SPAWN : S_LOCK;
+                    if (collide) begin
+                        if (want_grav) next_state = S_LOCK; // hit floor/wall on gravity
+                        else           next_state = S_FALL; // ignore side/rotate collide
+                    end
+                end
             end
 
-            S_CLEAR: next_state = S_SPAWN; // will change for next milestone
-            default: begin 
-                next_state = S_IDLE;
-                board_we = 1'b0;
+            S_LOCK: begin
+                // No board yet: just respawn for M2 visual
+                next_state = S_SPAWN;
             end
+
+            default: next_state = S_IDLE;
         endcase
     end
 
-	reg move_commit;   // 1-cycle pulse aligned to state update
-	wire will_move = have_action & ~collide;
+    assign will_move   = have_action & ~collide;
+    assign move_accept = move_commit;
 
-	// Signed next-position math to avoid unsigned wrap in piece_x/piece_y updates
-	wire signed [5:0] piece_x_next_s = $signed({1'b0, piece_x}) + $signed({{2{dX_lat[2]}}, dX_lat}); // 0..9 + (-4..+3)
-	wire signed [6:0] piece_y_next_s = $signed({2'b0, piece_y}) + $signed({{3{dY_lat[2]}}, dY_lat}); // 0..19 + (-4..+3)
-
-    always@(posedge CLOCK_50)
-    begin
-        if(!resetn)
-        begin
-    		dX_lat        <= 3'sd0;
-    		dY_lat        <= 3'sd0;
-    		want_rot_lat  <= 1'b0;
-    		new_rot_lat   <= 2'd0;
-			move_commit <= 1'b0;
-            lock_phase <= 0;
+    // register updates
+    always @(posedge CLOCK_50) begin
+        if (!resetn) begin
             state <= S_IDLE;
-            piece_x <= 0;
-            piece_y <= 0;
-            rot <= 0;
-            shape_id <= 3'd1;
-            lock_i <= 0;
-				/*
-            board_we <= 0;
-            board_wdata <= 0;
-            board_wx <= 0;
-            board_wy <= 0;
-            board_rx <= 0;
-            board_ry <= 0;
-				*/
+
+            piece_x <= 4'd4;
+            piece_y <= 5'd0;
             spawn_x <= 4'd4;
             spawn_y <= 5'd0;
-            score <= 0;
-        end
-        else
-        begin
-			move_commit <= 1'b0;
+
+            rot      <= 2'd0;
+            shape_id <= 3'd1;   // I-piece by default (works well for M2 visuals)
+
+            cur_x <= 0; cur_y <= 0;
+
+            dX_lat <= 0; dY_lat <= 0;
+            want_rot_lat <= 1'b0; new_rot_lat <= 2'd0;
+            move_commit <= 1'b0;
+
+            score <= 5'd0;
+        end else begin
+            move_commit <= 1'b0;
+            state <= next_state;
+
+            // drive painter coordinates (clamped)
             cur_x <= disp_x;
             cur_y <= disp_y;
-            state <= next_state;
-			if (state == S_FALL && will_move) begin
-      			move_commit <= 1'b1;       // fire the commit pulse
-				dX_lat       <= dX;        // latch deltas
-      			dY_lat       <= dY;
-      			want_rot_lat <= want_rot;
-      			new_rot_lat  <= new_rot;
-    		end
-			if (move_commit) begin
-				piece_x <= piece_x_next_s[3:0];
-				piece_y <= piece_y_next_s[4:0];
-      			if (want_rot_lat) rot <= new_rot_lat;
-    		end
-                if(state == S_SPAWN)
-                begin
-                    shape_id <= 3'd1;
-                    rot <= 0;
-                    piece_x <= spawn_x;
-                    piece_y <= spawn_y;
-                end
-                if(state == S_FALL && next_state == S_LOCK)
-                begin
-                    // prepare write list for LOCK (using current rot)
-                    wx_hold[0] <= piece_x + dx0_c;
-                    wy_hold[0] <= piece_y + dy0_c;
-                    wx_hold[1] <= piece_x + dx1_c;
-                    wy_hold[1] <= piece_y + dy1_c;
-                    wx_hold[2] <= piece_x + dx2_c;
-                    wy_hold[2] <= piece_y + dy2_c;
-                    wx_hold[3] <= piece_x + dx3_c;
-                    wy_hold[3] <= piece_y + dy3_c;
-                    lock_phase <= 2'd0;
-                end
-                if (state == S_LOCK)
-                begin
-                    if (lock_phase == 2'd3) 
-					begin
-                        lock_phase <= 2'd0;
-                        if (score != 5'd31) 
-                            score <= score + 5'd1;
-                        else
-                            score <= score;  // hold at max
-					end
-                    else 
-                        lock_phase <= lock_phase + 2'd1; 
-                end   
+
+            // capture accepted action at FALL
+            if (state == S_FALL && will_move) begin
+                move_commit  <= 1'b1;
+                dX_lat       <= dX;
+                dY_lat       <= dY;
+                want_rot_lat <= want_rot;
+                new_rot_lat  <= new_rot;
+            end
+
+            // commit position/rotation
+            if (move_commit) begin
+                piece_x <= piece_x + dX_lat;
+                piece_y <= piece_y + dY_lat;
+                if (want_rot_lat) rot <= new_rot_lat;
+            end
+
+            // spawn
+            if (state == S_SPAWN) begin
+                shape_id <= shape_id; // keep same for M2 (or change if you want randomizer later)
+                rot      <= 2'd0;
+                piece_x  <= spawn_x;
+                piece_y  <= spawn_y;
+            end
         end
-end
-	assign move_accept = move_commit; 
+    end
+
+    // LEDs (optional debug)
     assign LEDR[7:5] = state;
     assign LEDR[0]   = move_accept;
-    assign LEDR[1] = have_action & collide;
+    assign LEDR[1]   = have_action & collide;
     assign LEDR[2]   = tick_gravity;
-	assign LEDR[8]   = rot_final;  // pulses when rotate button is accepted at input stage
-	assign LEDR[4:3] = rot;        // shows 00→01→10→11 as you rotate
+    assign LEDR[8]   = rot_final;
+    assign LEDR[4:3] = rot;
+
 endmodule
