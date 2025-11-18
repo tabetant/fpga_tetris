@@ -22,7 +22,7 @@
 // ty[i] = piece_y + dY + dy[i]
 // 2 - bounds check
 // if tx < 0 | tx > 63 | ty > 23 => collide = 1 (illegal)
-// if read_cell(tx, ty) == 1, collide == 1
+// if read_cell(, ty) == 1, collide == 1
 // 3 - if all conditions keep collide = 0 , accept the move:
 // piece_x += dX, piece_y += dY, rot = new_rot
 
@@ -148,6 +148,17 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
 	wire signed [6:0] ty1_s = piece_y_s + dY_s + $signed({{3{dy1_t[3]}}, dy1_t});
 	wire signed [6:0] ty2_s = piece_y_s + dY_s + $signed({{3{dy2_t[3]}}, dy2_t});
 	wire signed [6:0] ty3_s = piece_y_s + dY_s + $signed({{3{dy3_t[3]}}, dy3_t});
+
+	// clamp for safe board addressing (used for board read probes)
+	wire [3:0] tx0_clamp = (tx0_s < 0) ? 4'd0 : (tx0_s > 9)  ? 4'd9  : tx0_s[3:0];
+	wire [3:0] tx1_clamp = (tx1_s < 0) ? 4'd0 : (tx1_s > 9)  ? 4'd9  : tx1_s[3:0];
+	wire [3:0] tx2_clamp = (tx2_s < 0) ? 4'd0 : (tx2_s > 9)  ? 4'd9  : tx2_s[3:0];
+	wire [3:0] tx3_clamp = (tx3_s < 0) ? 4'd0 : (tx3_s > 9)  ? 4'd9  : tx3_s[3:0];
+
+	wire [4:0] ty0_clamp = (ty0_s < 0) ? 5'd0 : (ty0_s > 19) ? 5'd19 : ty0_s[4:0];
+	wire [4:0] ty1_clamp = (ty1_s < 0) ? 5'd0 : (ty1_s > 19) ? 5'd19 : ty1_s[4:0];
+	wire [4:0] ty2_clamp = (ty2_s < 0) ? 5'd0 : (ty2_s > 19) ? 5'd19 : ty2_s[4:0];
+	wire [4:0] ty3_clamp = (ty3_s < 0) ? 5'd0 : (ty3_s > 19) ? 5'd19 : ty3_s[4:0];
 
 	always @* begin
   		collide_bounds = 1'b0;
