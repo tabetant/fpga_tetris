@@ -129,7 +129,8 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
     // compute target piece and check collision
 
     reg collide_bounds;
-
+	reg collide_board;
+	
    wire signed [5:0] piece_x_s = $signed({1'b0, piece_x}); // 0..9 -> 0..9
 	wire signed [6:0] piece_y_s = $signed({2'b00, piece_y}); // 0..19
 
@@ -159,6 +160,7 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
 
     always@*
     begin
+		collide_board = 0;
         dX = 0;
         dY = 0;
         next_state = state;
@@ -213,7 +215,26 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
                 end
                 new_rot = (rot + dRot) & 2'b11;
                 have_action = (want_left || want_right || want_rot || want_grav);
-                collide = collide_bounds;
+				
+				// board collision
+                board_rx = tx0_clamp;
+                board_ry = ty0_clamp;
+                if (board_rdata) collide_board = 1;
+
+                board_rx = tx1_clamp;
+                board_ry = ty1_clamp;
+                if (board_rdata) collide_board = 1;
+
+                board_rx = tx2_clamp;
+                board_ry = ty2_clamp;
+                if (board_rdata) collide_board = 1;
+
+                board_rx = tx3_clamp;
+                board_ry = ty3_clamp;
+                if (board_rdata) collide_board = 1;
+
+                collide = collide_bounds | collide_board;
+				
                 if (have_action) begin
     			if (collide) begin
         			if (want_grav)
