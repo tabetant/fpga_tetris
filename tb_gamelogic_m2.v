@@ -1,14 +1,10 @@
 `timescale 1ns/1ps
 
-// Testbench for Milestone-2 gamelogic (no board).
-// Drives left/right/rotate one-shots and gravity ticks.
-// Observes move_accept, cur_x/cur_y, and LEDR (state & rotation bits).
-
 module tb_gamelogic_m2;
 
+  // ===== Declarations (must come before procedural statements) =====
   // 50 MHz clock (20 ns period)
   reg CLOCK_50 = 0;
-  always #10 CLOCK_50 = ~CLOCK_50;
 
   // Active-high reset inside gamelogic is 'resetn' (sync to posedge)
   reg resetn = 0;
@@ -39,7 +35,13 @@ module tb_gamelogic_m2;
   wire [4:0] cur_y;
   wire       move_accept;
 
-  // DUT
+  // Utility for “drop to floor” loop
+  integer max_ticks;
+
+  // ===== Clock =====
+  always #10 CLOCK_50 = ~CLOCK_50;  // 50 MHz
+
+  // ===== DUT =====
   gamelogic DUT (
     .LEDR(LEDR),
     .CLOCK_50(CLOCK_50),
@@ -62,13 +64,11 @@ module tb_gamelogic_m2;
   );
 
   // -------- Helper tasks --------
-
   task pulse_left;
   begin
     left_final = 1'b1;
     @(posedge CLOCK_50);
     left_final = 1'b0;
-    // let FSM settle a few cycles
     repeat (3) @(posedge CLOCK_50);
   end
   endtask
@@ -123,14 +123,14 @@ module tb_gamelogic_m2;
       $display("%8t | %s  %0d    |     %0b       |  (%0d,%0d) |",
                $time,
                state_name(LEDR[7:5]),
-               {LEDR[4],LEDR[3]}, // rot bits
+               {LEDR[4],LEDR[3]}, // rot bits as 2-bit value
                move_accept, cur_x, cur_y);
     end
   end
 
   // Scenario
   initial begin
-    // init VCD (works in ModelSim too)
+    // Optional VCD (ModelSim can write VCD; if you prefer WLF, comment these)
     $dumpfile("gamelogic_m2.vcd");
     $dumpvars(0, tb_gamelogic_m2);
 
@@ -140,7 +140,6 @@ module tb_gamelogic_m2;
     resetn = 1;
     repeat (10) @(posedge CLOCK_50);
 
-    // Expect: spawn then fall state
     // 1) Rotate once (should advance rot 00->01)
     $display("=== Rotate once ===");
     pulse_rot;
@@ -156,22 +155,21 @@ module tb_gamelogic_m2;
     pulse_right;
     pulse_right;
 
-    // 4) Apply a few gravity ticks (should drop y and produce move_accept pulses)
+    // 4) Apply a few gravity ticks
     $display("=== Gravity 5 ticks ===");
     repeat (5) tick_g;
 
-    // 5) Slam to floor: keep ticking gravity until we see LOCK then SPAWN
+    // 5) “Drop to floor”: tick until S_LOCK then let it settle
     $display("=== Drop to floor (wait for S_LOCK->S_SPAWN) ===");
-    integer max_ticks;
     max_ticks = 40;
     while ( (LEDR[7:5] != 3'd3) && max_ticks > 0 ) begin // wait until S_LOCK
       tick_g;
       max_ticks = max_ticks - 1;
     end
-    // one more cycle to see transition
+    // a few extra cycles to see transition
     repeat (6) @(posedge CLOCK_50);
 
-    // 6) Quick sanity: after respawn, cur_y near top again
+    // 6) Quick sanity after respawn
     $display("=== Post-respawn sanity ===");
     repeat (5) @(posedge CLOCK_50);
 
