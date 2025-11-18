@@ -1,0 +1,2 @@
+# ** Error: tb_gamelogic_m2.v(165): Declarations not allowed in unnamed block.
+# ** Error: tb_gamelogic_m2.v(166): Illegal declaration after the statement near line '164'.  Declarations must precede statements.  Look for stray semicolons.
