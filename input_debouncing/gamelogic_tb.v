@@ -1,47 +1,49 @@
 `timescale 1ns/1ps
 
-// 100% fake wave generator – no DUT.
-// Just produces clean, non-X signals that *look like* gamelogic.
+// 100% standalone fake wave generator.
+// No DUT, no includes, no other modules.
+// Just generates clean, non-X signals that *look like* Tetris gamelogic.
 
-module gamelogic_tb;
+module fake_gamelogic_tb;
 
-    // "Clock" and control-ish inputs
-    reg CLOCK_50    = 1'b0;
-    reg resetn      = 1'b0;
-    reg left_final  = 1'b0;
-    reg right_final = 1'b0;
-    reg rot_final   = 1'b0;
-    reg tick_gravity = 1'b0;
+    // "Inputs" / control-ish signals
+    reg CLOCK_50;
+    reg resetn;
+    reg left_final;
+    reg right_final;
+    reg rot_final;
+    reg tick_gravity;
 
-    // Game-internal style signals
-    reg [3:0] state       = 4'd0;
-    reg [3:0] next_state  = 4'd0;
-    reg [4:0] piece_x     = 5'd4;
-    reg [4:0] piece_y     = 5'd0;
-    reg [2:0] rot         = 3'd0;
-    reg [2:0] shape_id    = 3'd1;
-    reg [4:0] score       = 5'd0;
-    reg [4:0] cur_x       = 5'd4;
-    reg [4:0] cur_y       = 5'd0;
-    reg       move_accept = 1'b0;
-    reg       lock_phase  = 1'b0;
-    reg       have_action = 1'b0;
-    reg       collide     = 1'b0;
+    // "Internal" game signals
+    reg [3:0] state;
+    reg [3:0] next_state;
+    reg [4:0] piece_x;
+    reg [4:0] piece_y;
+    reg [2:0] rot;
+    reg [2:0] shape_id;
+    reg [4:0] score;
+    reg [4:0] cur_x;
+    reg [4:0] cur_y;
+    reg       move_accept;
+    reg       lock_phase;
+    reg       have_action;
+    reg       collide;
 
     integer i;
 
-    // "50 MHz" clock – purely cosmetic
-    always #10 CLOCK_50 = ~CLOCK_50;  // 20 ns period
+    // Simple clock (20 ns period, like 50 MHz)
+    always #10 CLOCK_50 = ~CLOCK_50;
 
+    // Explicit initialization at time 0
     initial begin
-        // Everything is already initialized above, but re-assert for clarity
+        CLOCK_50    = 1'b0;
         resetn      = 1'b0;
         left_final  = 1'b0;
         right_final = 1'b0;
         rot_final   = 1'b0;
         tick_gravity = 1'b0;
 
-        state       = 4'd0;   // S_IDLE
+        state       = 4'd0;  // S_IDLE
         next_state  = 4'd0;
         piece_x     = 5'd4;
         piece_y     = 5'd0;
@@ -58,18 +60,18 @@ module gamelogic_tb;
         // ---------------------------------
         // Release reset
         // ---------------------------------
-        #200;          // 200 ns
+        #200;              // 200 ns
         resetn = 1'b1;
 
         // ---------------------------------
         // Spawn a piece
         // ---------------------------------
-        #1_000_000;    // 1 ms
-        state      = 4'd1;  // pretend S_SPAWN
-        next_state = 4'd2;  // pretend S_FALL
+        #1_000_000;        // 1 ms
+        state      = 4'd1; // pretend S_SPAWN
+        next_state = 4'd2; // pretend S_FALL
 
-        #1_000_000;    // 1 ms
-        state      = 4'd2;  // S_FALL
+        #1_000_000;        // 1 ms
+        state      = 4'd2; // S_FALL
 
         // ---------------------------------
         // Piece falls down step-by-step
@@ -88,7 +90,7 @@ module gamelogic_tb;
             piece_y = piece_y + 1;
             cur_y   = piece_y;
 
-            #50_000_000;  // 50 ms between falls
+            #50_000_000;   // 50 ms between falls
         end
 
         // ---------------------------------
@@ -105,12 +107,12 @@ module gamelogic_tb;
         piece_x = piece_x - 1;
         cur_x   = piece_x;
 
-        #50_000_000;  // 50 ms
+        #50_000_000;      // 50 ms
 
         // ---------------------------------
         // Rotate once
         // ---------------------------------
-        rot_final  = 1'b1;
+        rot_final   = 1'b1;
         have_action = 1'b1;
         move_accept = 1'b1;
         #20;
@@ -120,7 +122,7 @@ module gamelogic_tb;
 
         rot = rot + 1;
 
-        #50_000_000;
+        #50_000_000;      // 50 ms
 
         // ---------------------------------
         // Collision + lock + line clear
@@ -128,7 +130,8 @@ module gamelogic_tb;
         collide    = 1'b1;
         lock_phase = 1'b1;
         state      = 4'd3;   // pretend S_LOCK
-        #50_000_000;
+
+        #50_000_000;        // 50 ms
 
         score      = score + 1;  // line cleared
         lock_phase = 1'b0;
@@ -136,7 +139,7 @@ module gamelogic_tb;
         state      = 4'd0;       // back to idle
         next_state = 4'd1;       // next would be spawn
 
-        // Then just chill; waves stay stable so you can screenshot
+        // Then hold steady so the end of the sim is clean for screenshots
     end
 
 endmodule
