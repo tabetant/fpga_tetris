@@ -1,43 +1,44 @@
-# =========================================================
-# Library + compile
-# =========================================================
+# =========================================
+# Library & compile
+# =========================================
 vlib work
 vmap work work
 
-# Compile design + testbench
-# (Adjust paths if your files are in another folder)
-vlog gamelogic.v
+# Only the modules gamelogic actually uses
 vlog piece_offsets.v
+vlog gamelogic.v
 vlog gamelogic_tb.v
 
-# =========================================================
+# =========================================
 # Simulate
-# =========================================================
+# =========================================
 vsim -novopt work.gamelogic_tb
 
-# =========================================================
-# Waves
-# =========================================================
+# =========================================
+# Waves – only useful stuff (no X-storm)
+# =========================================
 
-# Top-level TB stuff
-add wave -divider {Clock & Reset}
+# Testbench-level
+add wave -divider {TB}
 add wave sim:/gamelogic_tb/CLOCK_50
 add wave sim:/gamelogic_tb/resetn
-
-add wave -divider {Inputs}
 add wave sim:/gamelogic_tb/left_final
 add wave sim:/gamelogic_tb/right_final
 add wave sim:/gamelogic_tb/rot_final
 add wave sim:/gamelogic_tb/tick_gravity
 
-add wave -divider {High-level Outputs}
-add wave sim:/gamelogic_tb/score
-add wave sim:/gamelogic_tb/cur_x
-add wave sim:/gamelogic_tb/cur_y
-add wave sim:/gamelogic_tb/move_accept
+# Ports of gamelogic
+add wave -divider {DUT ports}
+add wave sim:/gamelogic_tb/dut/score
+add wave sim:/gamelogic_tb/dut/cur_x
+add wave sim:/gamelogic_tb/dut/cur_y
+add wave sim:/gamelogic_tb/dut/move_accept
+add wave sim:/gamelogic_tb/dut/board_we
+add wave sim:/gamelogic_tb/dut/board_wx
+add wave sim:/gamelogic_tb/dut/board_wy
 
-# Internal FSM + piece info inside gamelogic
-add wave -divider {FSM & Piece (dut)}
+# Internal FSM + piece coordinates
+add wave -divider {FSM & Piece}
 add wave sim:/gamelogic_tb/dut/state
 add wave sim:/gamelogic_tb/dut/next_state
 add wave sim:/gamelogic_tb/dut/piece_x
@@ -48,16 +49,10 @@ add wave sim:/gamelogic_tb/dut/lock_phase
 add wave sim:/gamelogic_tb/dut/have_action
 add wave sim:/gamelogic_tb/dut/collide
 
-# (Optional) Board write coordinates if you want them, but commented to avoid clutter:
-# add wave sim:/gamelogic_tb/dut/board_wx
-# add wave sim:/gamelogic_tb/dut/board_wy
-# add wave sim:/gamelogic_tb/dut/board_we
+# (No LEDR or VGA here, on purpose.)
 
-# No LEDR/VGA here on purpose -> clean screen.
-
-# =========================================================
-# Run long enough to see lots of movement
-# =========================================================
+# =========================================
+# Run long enough to see motion
+# =========================================
 run 2 s
-
 wave zoom full
