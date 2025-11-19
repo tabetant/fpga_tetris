@@ -7,10 +7,10 @@ module tetris(
     SW, KEY, CLOCK_50, LEDR, PS2_CLK, PS2_DAT,
     VGA_R, VGA_G, VGA_B, VGA_HS, VGA_VS, VGA_BLANK_N, VGA_SYNC_N, VGA_CLK
 );
-    input  [9:0] SW;
-    input  [3:0] KEY;
-    input        CLOCK_50;
-    output [9:0] LEDR;
+    input wire [9:0] SW;
+    input  wire [3:0] KEY;
+    input       wire CLOCK_50;
+    output wire [9:0] LEDR;
 
     output wire [7:0]  VGA_R, VGA_G, VGA_B;
     output wire        VGA_HS, VGA_VS, VGA_BLANK_N, VGA_SYNC_N, VGA_CLK;
@@ -43,8 +43,8 @@ module tetris(
     // =========================================================
     // PS/2 keyboard controller and key decode
     // =========================================================
-	 input PS2_CLK;
-	input PS2_DAT;
+	 input wire PS2_CLK;
+	input wire PS2_DAT;
     wire [7:0] ps2_key_data;
     wire       ps2_key_pressed;
 
