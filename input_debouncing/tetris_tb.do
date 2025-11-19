@@ -4,20 +4,26 @@
 vlib work
 vmap work work
 
-# Compile your design files
-vlog tetris.v
-vlog gamelogic.v
+# 1) Compile core logic modules (no `default_nettype none` at top)
+#    Add any other lab/course files *without* default_nettype here.
 vlog piece_offsets.v
 vlog pending_event.v
 vlog debouncer.v
 vlog synchronizer.v
+vlog gamelogic.v
+
+# If you have tick_i.v, tick_g.v, PS2_Interface.v, vga_adapter.v, etc.,
+# compile them here as well, BEFORE render/tetris:
+# vlog tick_i.v
+# vlog tick_g.v
+# vlog PS2_Interface.v
+# vlog vga_adapter.v
+
+# 2) Modules that start with `default_nettype none` – compile these late
 vlog render.v
+vlog tetris.v
 
-# If you have extra provided files (tick_i, tick_g, PS2_Interface, vga_adapter, etc.)
-# in the same folder, you can also just do:
-# vlog *.v
-
-# Compile the testbench
+# 3) Testbench (has `default_nettype wire` at the top)
 vlog tetris_tb.v
 
 # =========================================
@@ -26,10 +32,10 @@ vlog tetris_tb.v
 vsim -novopt work.tetris_tb
 
 # =========================================
-# Waves: only important stuff
+# Waves – only important stuff
 # =========================================
 
-# Top-level TB controls
+# Top-level TB signals
 add wave -divider {TB top}
 add wave sim:/tetris_tb/CLOCK_50
 add wave sim:/tetris_tb/KEY
@@ -78,7 +84,7 @@ add wave sim:/tetris_tb/dut/GAME/lock_phase
 add wave sim:/tetris_tb/dut/GAME/have_action
 add wave sim:/tetris_tb/dut/GAME/collide
 
-# No LEDR, no VGA waves → clean screen
+# No LEDR/VGA here by design → no clutter.
 
 # =========================================
 # Run for 2 seconds
