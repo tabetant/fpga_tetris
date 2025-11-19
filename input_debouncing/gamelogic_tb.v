@@ -66,4 +66,77 @@ module gamelogic_tb;
         // ---------------------------------
         #1_000_000;    // 1 ms
         state      = 4'd1;  // pretend S_SPAWN
-        next_state = 4'd2;  // pretend S_
+        next_state = 4'd2;  // pretend S_FALL
+
+        #1_000_000;    // 1 ms
+        state      = 4'd2;  // S_FALL
+
+        // ---------------------------------
+        // Piece falls down step-by-step
+        // ---------------------------------
+        for (i = 0; i < 8; i = i + 1) begin
+            // Fake a gravity tick
+            tick_gravity = 1'b1;
+            have_action  = 1'b1;
+            move_accept  = 1'b1;
+            #20;
+            tick_gravity = 1'b0;
+            have_action  = 1'b0;
+            move_accept  = 1'b0;
+
+            // Move piece down one row
+            piece_y = piece_y + 1;
+            cur_y   = piece_y;
+
+            #50_000_000;  // 50 ms between falls
+        end
+
+        // ---------------------------------
+        // Move left once
+        // ---------------------------------
+        left_final  = 1'b1;
+        have_action = 1'b1;
+        move_accept = 1'b1;
+        #20;
+        left_final  = 1'b0;
+        have_action = 1'b0;
+        move_accept = 1'b0;
+
+        piece_x = piece_x - 1;
+        cur_x   = piece_x;
+
+        #50_000_000;  // 50 ms
+
+        // ---------------------------------
+        // Rotate once
+        // ---------------------------------
+        rot_final  = 1'b1;
+        have_action = 1'b1;
+        move_accept = 1'b1;
+        #20;
+        rot_final   = 1'b0;
+        have_action = 1'b0;
+        move_accept = 1'b0;
+
+        rot = rot + 1;
+
+        #50_000_000;
+
+        // ---------------------------------
+        // Collision + lock + line clear
+        // ---------------------------------
+        collide    = 1'b1;
+        lock_phase = 1'b1;
+        state      = 4'd3;   // pretend S_LOCK
+        #50_000_000;
+
+        score      = score + 1;  // line cleared
+        lock_phase = 1'b0;
+        collide    = 1'b0;
+        state      = 4'd0;       // back to idle
+        next_state = 4'd1;       // next would be spawn
+
+        // Then just chill; waves stay stable so you can screenshot
+    end
+
+endmodule
