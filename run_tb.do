@@ -23,14 +23,15 @@ add wave sim:/tb_gamelogic_m2/right_final
 add wave sim:/tb_gamelogic_m2/rot_final
 add wave sim:/tb_gamelogic_m2/tick_gravity
 
-add wave -radix unsigned sim:/tb_gamelogic_m2/**/state
-add wave -radix unsigned sim:/tb_gamelogic_m2/**/rot
-add wave -radix unsigned sim:/tb_gamelogic_m2/**/piece_x
-add wave -radix unsigned sim:/tb_gamelogic_m2/**/piece_y
-add wave -radix unsigned sim:/tb_gamelogic_m2/**/cur_x
-add wave -radix unsigned sim:/tb_gamelogic_m2/**/cur_y
-add wave sim:/tb_gamelogic_m2/**/move_accept
-add wave sim:/tb_gamelogic_m2/**/collide
+add wave -radix unsigned sim:/tb_gamelogic_m2/dut/state
+add wave -radix unsigned sim:/tb_gamelogic_m2/dut/rot
+add wave -radix unsigned sim:/tb_gamelogic_m2/dut/piece_x
+add wave -radix unsigned sim:/tb_gamelogic_m2/dut/piece_y
+add wave -radix unsigned sim:/tb_gamelogic_m2/dut/cur_x
+add wave -radix unsigned sim:/tb_gamelogic_m2/dut/cur_y
+add wave sim:/tb_gamelogic_m2/dut/have_action
+add wave sim:/tb_gamelogic_m2/dut/collide
+add wave sim:/tb_gamelogic_m2/dut/move_accept
 
 force -freeze sim:/tb_gamelogic_m2/CLOCK_50 0 0ns, 1 10ns -repeat 20ns
 
