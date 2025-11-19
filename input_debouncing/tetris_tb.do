@@ -1,40 +1,47 @@
-# =========================================================
-# Library + compile
-# =========================================================
+# =========================================
+# Library & compile
+# =========================================
 vlib work
 vmap work work
 
-# Compile all .v files in the directory
-vlog *.v
+# Compile your design files
+vlog tetris.v
+vlog gamelogic.v
+vlog piece_offsets.v
+vlog pending_event.v
+vlog debouncer.v
+vlog synchronizer.v
+vlog render.v
 
-# If your edge detector file really is named edgedetect.v.txt, include it explicitly:
-# vlog edgedetect.v.txt
+# If you have extra provided files (tick_i, tick_g, PS2_Interface, vga_adapter, etc.)
+# in the same folder, you can also just do:
+# vlog *.v
 
-# Compile the testbench last (so default_nettype none from tetris is already in effect)
+# Compile the testbench
 vlog tetris_tb.v
 
-# =========================================================
-# Simulate
-# =========================================================
+# =========================================
+# Simulate testbench
+# =========================================
 vsim -novopt work.tetris_tb
 
-# =========================================================
-# Waves
-# =========================================================
+# =========================================
+# Waves: only important stuff
+# =========================================
 
-# Top-level TB signals
-add wave -divider {Top-level TB}
+# Top-level TB controls
+add wave -divider {TB top}
 add wave sim:/tetris_tb/CLOCK_50
 add wave sim:/tetris_tb/KEY
 add wave sim:/tetris_tb/SW
 
-# Inside tetris DUT
+# Inside tetris
 add wave -divider {tetris: reset & ticks}
 add wave sim:/tetris_tb/dut/resetn
 add wave sim:/tetris_tb/dut/tick_input
 add wave sim:/tetris_tb/dut/tick_gravity
 
-add wave -divider {tetris: PS2 pulses}
+add wave -divider {tetris: PS/2 pulses}
 add wave sim:/tetris_tb/dut/left_ps2_pulse
 add wave sim:/tetris_tb/dut/right_ps2_pulse
 add wave sim:/tetris_tb/dut/rot_ps2_pulse
@@ -53,13 +60,13 @@ add wave sim:/tetris_tb/dut/board_rx
 add wave sim:/tetris_tb/dut/board_ry
 add wave sim:/tetris_tb/dut/board_rdata
 
-add wave -divider {tetris: high-level game outputs}
+add wave -divider {tetris: game outputs}
 add wave sim:/tetris_tb/dut/score
 add wave sim:/tetris_tb/dut/cur_x
 add wave sim:/tetris_tb/dut/cur_y
 add wave sim:/tetris_tb/dut/move_accept
 
-# Core game FSM inside gamelogic instance "GAME"
+# Core game FSM & piece inside gamelogic instance "GAME"
 add wave -divider {GAME FSM & piece}
 add wave sim:/tetris_tb/dut/GAME/state
 add wave sim:/tetris_tb/dut/GAME/next_state
@@ -71,11 +78,10 @@ add wave sim:/tetris_tb/dut/GAME/lock_phase
 add wave sim:/tetris_tb/dut/GAME/have_action
 add wave sim:/tetris_tb/dut/GAME/collide
 
-# No LEDR/VGA added here on purpose to keep things clean.
+# No LEDR, no VGA waves → clean screen
 
-# =========================================================
-# Run long enough to see interesting behavior
-# =========================================================
+# =========================================
+# Run for 2 seconds
+# =========================================
 run 2 s
-
 wave zoom full
