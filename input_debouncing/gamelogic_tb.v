@@ -4,7 +4,7 @@
 // No DUT, no includes, no other modules.
 // Just generates clean, non-X signals that *look like* Tetris gamelogic.
 
-module fake_gamelogic_tb;
+module gamelogic_tb;
 
     // "Inputs" / control-ish signals
     reg CLOCK_50;
