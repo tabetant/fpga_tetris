@@ -24,7 +24,7 @@ module render_box20 (
     localparam nY = 9;
 
     // Cell size for Tetris
-    localparam [nX-1:0] BOX_W = 10'd64;
+    localparam [nX-1:0] BOX_W = 10'd24;
     localparam [nY-1:0] BOX_H = 9'd24;
 
     // Offsets within the box
