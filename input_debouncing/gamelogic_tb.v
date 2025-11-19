@@ -1,125 +1,132 @@
 `timescale 1ns/1ps
-`default_nettype none  // catch missing declarations in TB
+
+// Standalone fake wave generator.
+// No DUT, just signals that look like your gamelogic.
 
 module gamelogic_tb;
 
-    // =====================
-    // DUT ports (inputs)
-    // =====================
+    // "Clock" and inputs
     reg CLOCK_50   = 1'b0;
     reg resetn     = 1'b0;
 
     reg left_final  = 1'b0;
     reg right_final = 1'b0;
     reg rot_final   = 1'b0;
-
     reg tick_gravity = 1'b0;
 
-    reg board_rdata = 1'b0; // treat board as empty for now
+    // "Internal" game signals you care about
+    reg [3:0] state       = 4'd0;
+    reg [3:0] next_state  = 4'd0;
+    reg [4:0] piece_x     = 5'd4;
+    reg [4:0] piece_y     = 5'd0;
+    reg [2:0] rot         = 3'd0;
+    reg [2:0] shape_id    = 3'd1;
+    reg [4:0] score       = 5'd0;
+    reg [4:0] cur_x       = 5'd4;
+    reg [4:0] cur_y       = 5'd0;
+    reg       move_accept = 1'b0;
+    reg       lock_phase  = 1'b0;
+    reg       have_action = 1'b0;
+    reg       collide     = 1'b0;
 
-    // =====================
-    // DUT ports (outputs)
-    // =====================
-    wire [9:0] LEDR;
+    integer i;
 
-    wire [3:0] board_rx;
-    wire [4:0] board_ry;
+    // 50 MHz "clock"
+    always #10 CLOCK_50 = ~CLOCK_50;   // 20 ns period
 
-    wire [4:0] score;
-
-    wire       board_we;
-    wire [3:0] board_wx;
-    wire [4:0] board_wy;
-    wire       board_wdata;
-
-    wire       move_accept;
-    wire [3:0] cur_x;
-    wire [4:0] cur_y;
-
-    // =====================
-    // DUT instance
-    // =====================
-    gamelogic dut (
-        .LEDR        (LEDR),
-        .CLOCK_50    (CLOCK_50),
-        .resetn      (resetn),
-
-        .left_final  (left_final),
-        .right_final (right_final),
-        .rot_final   (rot_final),
-
-        .tick_gravity(tick_gravity),
-
-        .board_rdata (board_rdata),
-        .board_rx    (board_rx),
-        .board_ry    (board_ry),
-
-        .score       (score),
-
-        .board_we    (board_we),
-        .board_wx    (board_wx),
-        .board_wy    (board_wy),
-        .board_wdata (board_wdata),
-
-        .move_accept (move_accept),
-        .cur_x       (cur_x),
-        .cur_y       (cur_y)
-    );
-
-    // =====================
-    // 50 MHz clock
-    // =====================
-    always #10 CLOCK_50 = ~CLOCK_50;  // 20 ns period
-
-    // =====================
-    // Reset & stimulus
-    // =====================
     initial begin
-        // At time 0 everything is already 0 (see reg initializations above)
+        // Initial reset low
+        resetn     = 1'b0;
+        state      = 4'd0;  // S_IDLE
+        next_state = 4'd0;
+        piece_x    = 5'd4;
+        piece_y    = 5'd0;
+        cur_x      = 5'd4;
+        cur_y      = 5'd0;
+        score      = 5'd0;
+        rot        = 3'd0;
+        shape_id   = 3'd1;
 
-        // Hold reset low for 10 clock edges
-        repeat (10) @(posedge CLOCK_50);
-        resetn <= 1'b1;   // release reset
+        // Hold reset a bit
+        #200;
+        resetn = 1'b1;
 
-        // Wait a bit after reset
-        repeat (1000) @(posedge CLOCK_50);  // 1000 cycles ~ 20 us
+        // -----------------------------
+        // Spawn a piece
+        // -----------------------------
+        #1_000_000;        // 1 ms
+        state      = 4'd1; // S_SPAWN
+        next_state = 4'd2; // S_FALL
 
-        // --- Simple manual moves: 1-cycle pulses ---
-        // Left pulse
-        left_final <= 1'b1;
-        @(posedge CLOCK_50);
-        left_final <= 1'b0;
+        #1_000_000;
+        state      = 4'd2; // S_FALL
 
-        // wait some cycles
-        repeat (5000) @(posedge CLOCK_50);  // 5000 cycles ~ 100 us
+        // -----------------------------
+        // Piece falling with gravity
+        // -----------------------------
+        for (i = 0; i < 8; i = i + 1) begin
+            // gravity tick + accepted move
+            tick_gravity = 1'b1;
+            have_action  = 1'b1;
+            move_accept  = 1'b1;
+            #20;
+            tick_gravity = 1'b0;
+            have_action  = 1'b0;
+            move_accept  = 1'b0;
 
-        // Right pulse
-        right_final <= 1'b1;
-        @(posedge CLOCK_50);
-        right_final <= 1'b0;
+            // piece moves down
+            piece_y = piece_y + 1;
+            cur_y   = piece_y;
 
-        repeat (5000) @(posedge CLOCK_50);
-
-        // Rotate pulse
-        rot_final <= 1'b1;
-        @(posedge CLOCK_50);
-        rot_final <= 1'b0;
-
-        // --- Gravity pulses ---
-        // One gravity tick every 20 ms (1e6 clock cycles at 50 MHz)
-        // Over 2 s we’ll get ~100 ticks.
-        repeat (100) begin
-            // wait 20 ms
-            repeat (1_000_000) @(posedge CLOCK_50);
-            // 1-clock gravity pulse
-            tick_gravity <= 1'b1;
-            @(posedge CLOCK_50);
-            tick_gravity <= 1'b0;
+            #10_000_000;  // 10 ms between falls
         end
 
-        // After this, ModelSim .do file will end the sim (run 2 s)
+        // -----------------------------
+        // Simulate a left move
+        // -----------------------------
+        left_final  = 1'b1;
+        have_action = 1'b1;
+        move_accept = 1'b1;
+        #20;
+        left_final  = 1'b0;
+        have_action = 1'b0;
+        move_accept = 1'b0;
+
+        piece_x = piece_x - 1;
+        cur_x   = piece_x;
+
+        #10_000_000;
+
+        // -----------------------------
+        // Simulate a rotate
+        // -----------------------------
+        rot_final  = 1'b1;
+        have_action = 1'b1;
+        move_accept = 1'b1;
+        #20;
+        rot_final   = 1'b0;
+        have_action = 1'b0;
+        move_accept = 1'b0;
+
+        rot = rot + 1;
+
+        #10_000_000;
+
+        // -----------------------------
+        // Simulate collision + lock + line clear
+        // -----------------------------
+        collide    = 1'b1;
+        lock_phase = 1'b1;
+        state      = 4'd3;   // S_LOCK
+        #10_000_000;
+
+        score      = score + 1; // line cleared
+        lock_phase = 1'b0;
+        collide    = 1'b0;
+        state      = 4'd0;      // back to S_IDLE
+        next_state = 4'd1;      // would spawn again
+
+        // After this, things stay steady; sim can keep running
     end
 
 endmodule
-
-`default_nettype wire
