@@ -1,26 +1,24 @@
 `timescale 1ns/1ps
-
-// Testbench for the top-level tetris module.
-// - 50 MHz clock
-// - KEY[3] used as reset (active-high resetn inside tetris)
-// - PS2 lines held idle (no keypresses)
-// - SW unused => tied low
+`default_nettype none
 
 module tetris_tb;
 
-    // Top-level inputs
+    // ==============================
+    // DUT top-level I/O
+    // ==============================
     reg  [9:0] SW;
     reg  [3:0] KEY;
     reg        CLOCK_50;
     reg        PS2_CLK;
     reg        PS2_DAT;
 
-    // Top-level outputs
     wire [9:0] LEDR;
     wire [7:0] VGA_R, VGA_G, VGA_B;
     wire       VGA_HS, VGA_VS, VGA_BLANK_N, VGA_SYNC_N, VGA_CLK;
 
-    // DUT
+    // ==============================
+    // DUT instance
+    // ==============================
     tetris dut (
         .SW       (SW),
         .KEY      (KEY),
@@ -38,28 +36,33 @@ module tetris_tb;
         .VGA_CLK     (VGA_CLK)
     );
 
+    // ==============================
     // 50 MHz clock: 20 ns period
+    // ==============================
     initial begin
         CLOCK_50 = 1'b0;
-        forever #10 CLOCK_50 = ~CLOCK_50; // 20 ns
+        forever #10 CLOCK_50 = ~CLOCK_50;
     end
 
-    // Drive inputs
+    // ==============================
+    // Stimulus
+    // ==============================
     initial begin
-        // Initial conditions
-        SW      = 10'd0;      // all switches low
-        KEY     = 4'b0000;    // KEY[3] = 0 -> resetn = 0 inside tetris
-        PS2_CLK = 1'b1;       // PS/2 idle high
-        PS2_DAT = 1'b1;       // PS/2 idle high
+        // Safe initial values
+        SW      = 10'd0;
+        KEY     = 4'b0000;     // KEY[3] = 0 -> resetn = 0 inside tetris
+        PS2_CLK = 1'b1;        // PS/2 idle
+        PS2_DAT = 1'b1;
 
-        // Hold reset for a bit (several clock cycles)
-        #200;                 // 200 ns
-        KEY[3] = 1'b1;        // release reset (resetn = 1)
+        // Hold reset for a bit
+        #200;                  // 200 ns
+        KEY[3] = 1'b1;         // release reset (resetn = KEY[3])
 
-        // After this we just let the design run.
-        // tick_input/tick_gravity are generated internally.
-        // If you want to inject PS/2 keypresses later,
-        // you can add a PS2 stimulus process here.
+        // After this we just let it run.
+        // Gravity tick comes from your tick_g module.
+        // PS/2 is idle (no moves) so you see pure gravity behavior.
     end
 
 endmodule
+
+`default_nettype wire
