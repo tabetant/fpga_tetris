@@ -43,18 +43,20 @@ module tetris(
     // =========================================================
     // PS/2 keyboard controller and key decode
     // =========================================================
+	 input PS2_CLK;
+	input PS2_DAT;
     wire [7:0] ps2_key_data;
     wire       ps2_key_pressed;
 
-    PS2_Controller PS2 (
-        .CLOCK_50         (CLOCK_50),
-        .reset            (~resetn),
-        .PS2_CLK          (PS2_CLK),
-        .PS2_DAT          (PS2_DAT),
-        .received_data    (ps2_key_data),
-        .received_data_en (ps2_key_pressed)
-    );
-
+    PS2_Interface PS2 (
+    .CLOCK_50       (CLOCK_50),
+    .resetn         (resetn),
+    .PS2_CLK        (PS2_CLK),
+    .PS2_DAT        (PS2_DAT),
+    .scan_code      (ps2_key_data),
+    .scan_code_valid(ps2_key_pressed)
+);
+ 
     // Decode PS/2 make codes into 1-cycle pulses
     //   'A' (0x1C) -> left
     //   'D' (0x23) -> right
@@ -91,27 +93,27 @@ module tetris(
 
     // These are already 1-cycle pulses, so we only rate-limit them with pending_event.
     pending_event p_left (
-        .event_in  (left_ps2_pulse),
-        .tick      (tick_input),
+        .edge_1clk  (left_ps2_pulse),
+        .tick_input      (tick_input),
         .resetn    (resetn),
-        .CLOCK_50  (CLOCK_50),
-        .event_out (left_final)
+        .clock  (CLOCK_50),
+        .button (left_final)
     );
 
     pending_event p_right (
-        .event_in  (right_ps2_pulse),
-        .tick      (tick_input),
+        .edge_1clk  (right_ps2_pulse),
+        .tick_input      (tick_input),
         .resetn    (resetn),
-        .CLOCK_50  (CLOCK_50),
-        .event_out (right_final)
+        .clock  (CLOCK_50),
+        .button (right_final)
     );
 
     pending_event p_rot (
-        .event_in  (rot_ps2_pulse),
-        .tick      (tick_input),
+        .edge_1clk  (rot_ps2_pulse),
+        .tick_input      (tick_input),
         .resetn    (resetn),
-        .CLOCK_50  (CLOCK_50),
-        .event_out (rot_final)
+        .clock  (CLOCK_50),
+        .button (rot_final)
     );
 
     // NOTE: KEY[0], KEY[1], KEY[2] are now unused.
@@ -151,9 +153,9 @@ module tetris(
         .board_wy    (board_wy),
         .board_wdata (board_wdata),
         .score       (score),
-        .pix_x       (cur_x),
-        .pix_y       (cur_y),
-        .pix_we      (move_accept)
+        .cur_x       (cur_x),
+        .cur_y       (cur_y),
+        .move_accept      (move_accept)
     );
 
     // =========================================================
@@ -285,7 +287,7 @@ module tetris(
     end
 
     // painter
-    render_box20 RENDER (
+    render_box24 RENDER (
         .CLOCK_50    (CLOCK_50),
         .resetn      (resetn),
         .start       (kick),
