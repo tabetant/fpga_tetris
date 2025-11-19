@@ -75,7 +75,7 @@ module tetris(
     reg [8:0]  paint_color;
 
     wire [8:0] piece_color = 9'b111_000_111; // magenta
-    wire [8:0] bg_color    = 9'd0;
+    wire [8:0] bg_color    = 9'b111111111;
 
     // remember last cell
     reg [3:0] prev_x;
