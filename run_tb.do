@@ -1,62 +1,71 @@
-; ---------- CLEAN-SLATE DOFILE ----------
+; =========================
+;  reset-and-run.do  (ModelSim)
+; =========================
 transcript on
-quietly vlib work
-quietly vmap work work
+onerror {resume}
+onbreak  {resume}
 
-; Compile
-vlog +acc tetris_piece_offsets.v gamelogic.v tb_gamelogic_m2.v
+; --- Clean & setup work lib ---
+quietly catch { vdel -lib work -all }
+vlib work
+vmap work work
 
-; Start sim with full access
+; --- Compile everything (order matters) ---
+;   <<<EDIT IF NEEDED>>> add/remove your source files here
+vlog -sv +acc tetris_piece_offsets.v
+vlog -sv +acc gamelogic.v
+vlog -sv +acc tb_gamelogic_m2.v
+
+; --- Elaborate TB ---
+;   <<<EDIT IF NEEDED>>> change tb name if your top differs
 vsim -voptargs=+acc work.tb_gamelogic_m2
 
-; Reset wave window
+; --- Make sure all signals are visible and logged ---
+log -r /*
+
+; --- Wave window: clear and add EVERYTHING recursively ---
 quietly .wave clear
-quietly view wave
-quietly wave zoom full
+view wave
+add wave -r /*
 
-; Top-level TB
-add wave -divider {TB Clocks & Reset}
-add wave -radix unsigned sim:/tb_gamelogic_m2/CLOCK_50
-add wave -radix binary  sim:/tb_gamelogic_m2/resetn
+; --- Force a 50 MHz clock on TB's CLOCK_50 ---
+force -freeze sim:/tb_gamelogic_m2/CLOCK_50 0 0ns, 1 10ns -repeat 20ns
 
-add wave -divider {TB Inputs to DUT}
-add wave -radix binary  sim:/tb_gamelogic_m2/left_final
-add wave -radix binary  sim:/tb_gamelogic_m2/right_final
-add wave -radix binary  sim:/tb_gamelogic_m2/rot_final
-add wave -radix binary  sim:/tb_gamelogic_m2/tick_gravity
+; --- Hold reset low for a bit, then release ---
+force -freeze sim:/tb_gamelogic_m2/resetn 0
+run 200 ns
+force -freeze sim:/tb_gamelogic_m2/resetn 1
 
-add wave -divider {Board Stubs}
-add wave -radix binary  sim:/tb_gamelogic_m2/board_rdata
-add wave -radix unsigned sim:/tb_gamelogic_m2/board_rx
-add wave -radix unsigned sim:/tb_gamelogic_m2/board_ry
+; --- Default the inputs low so nothing is 'X' ---
+force -freeze sim:/tb_gamelogic_m2/left_final   0
+force -freeze sim:/tb_gamelogic_m2/right_final  0
+force -freeze sim:/tb_gamelogic_m2/rot_final    0
+force -freeze sim:/tb_gamelogic_m2/tick_gravity 0
+force -freeze sim:/tb_gamelogic_m2/board_rdata  0
 
-add wave -divider {DUT -> TB Observables}
-add wave -radix unsigned sim:/tb_gamelogic_m2/LEDR
-add wave -radix unsigned sim:/tb_gamelogic_m2/score
-add wave -radix unsigned sim:/tb_gamelogic_m2/cur_x
-add wave -radix unsigned sim:/tb_gamelogic_m2/cur_y
-add wave -radix binary  sim:/tb_gamelogic_m2/move_accept
+; --- Give time after reset ---
+run 1 us
 
-; Dive into DUT internals (handy for M2)
-add wave -divider {DUT State & Int}
-add wave -radix unsigned sim:/tb_gamelogic_m2/DUT/state
-add wave -radix unsigned sim:/tb_gamelogic_m2/DUT/next_state
-add wave -radix unsigned sim:/tb_gamelogic_m2/DUT/rot
-add wave -radix unsigned sim:/tb_gamelogic_m2/DUT/new_rot
-add wave -radix signed   sim:/tb_gamelogic_m2/DUT/dX
-add wave -radix signed   sim:/tb_gamelogic_m2/DUT/dY
-add wave -radix binary   sim:/tb_gamelogic_m2/DUT/have_action
-add wave -radix binary   sim:/tb_gamelogic_m2/DUT/collide
-add wave -radix binary   sim:/tb_gamelogic_m2/DUT/collide_bounds
+; --- Stimulus script (simple, visible) ---
+; Rotate once at 2 ms
+force -freeze sim:/tb_gamelogic_m2/rot_final 1 2ms, 0 2.02ms
 
-; If these exist in your M2 version:
-quietly catch { add wave -radix binary sim:/tb_gamelogic_m2/DUT/move_commit }
-quietly catch { add wave -radix unsigned sim:/tb_gamelogic_m2/DUT/piece_x }
-quietly catch { add wave -radix unsigned sim:/tb_gamelogic_m2/DUT/piece_y }
+; Move left at 4 ms
+force -freeze sim:/tb_gamelogic_m2/left_final 1 4ms, 0 4.02ms
 
-; Run
-run 2 ms
+; Move right at 6 ms
+force -freeze sim:/tb_gamelogic_m2/right_final 1 6ms, 0 6.02ms
+
+; Gravity ticks at 10, 20, 30, 40 ms (2-cycle pulses)
+force -freeze sim:/tb_gamelogic_m2/tick_gravity \
+    1 10ms, 0 10.02ms, \
+    1 20ms, 0 20.02ms, \
+    1 30ms, 0 30.02ms, \
+    1 40ms, 0 40.02ms
+
+; --- Run long enough to see everything change ---
+run 50 ms
 wave zoom full
 
-; Don’t close on finish
+; Keep GUI open
 quietly set NoQuitOnFinish 1
