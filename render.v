@@ -126,7 +126,7 @@ module render_box20 (
     defparam VGA.RESOLUTION       = "640x480";
     defparam VGA.COLOR_DEPTH      = 9;
     // Adjust or override this in your top if you want:
-    defparam VGA.BACKGROUND_IMAGE = "./frame3.mif";
+    defparam VGA.BACKGROUND_IMAGE = "./VGA/frame3.mif";
 
 endmodule
 
