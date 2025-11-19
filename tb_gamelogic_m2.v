@@ -2,22 +2,20 @@
 
 module tb_gamelogic_m2;
 
-  // ===== Declarations (must come before procedural statements) =====
-  // 50 MHz clock (20 ns period)
-  reg CLOCK_50 = 0;
+  // ===== Top-level declarations (Verilog-2001: no in-block decls) =====
+  // Clock/reset
+  reg CLOCK_50 = 1'b0;
+  reg resetn   = 1'b0;
 
-  // Active-high reset inside gamelogic is 'resetn' (sync to posedge)
-  reg resetn = 0;
+  // Control pulses (already debounced at DUT level)
+  reg left_final  = 1'b0;
+  reg right_final = 1'b0;
+  reg rot_final   = 1'b0;
 
-  // Control inputs (already debounced/one-shot at the GAME level)
-  reg left_final  = 0;
-  reg right_final = 0;
-  reg rot_final   = 0;
+  // Gravity tick
+  reg tick_gravity = 1'b0;
 
-  // Gravity tick (single-cycle pulse)
-  reg tick_gravity = 0;
-
-  // Board interface (unused for M2; tie rdata low)
+  // Board interface (unused for M2: tie reads low)
   wire        board_rdata;
   wire [3:0]  board_rx;
   wire [4:0]  board_ry;
@@ -26,20 +24,21 @@ module tb_gamelogic_m2;
   wire [4:0]  board_wy;
   wire        board_wdata;
 
-  assign board_rdata = 1'b0; // no blocks on board in M2 test
+  assign board_rdata = 1'b0;
 
-  // Outputs to watch
+  // DUT observable outputs
   wire [9:0] LEDR;
   wire [4:0] score;
   wire [3:0] cur_x;
   wire [4:0] cur_y;
   wire       move_accept;
 
-  // Utility for “drop to floor” loop
+  // Utilities
+  integer k;        // loop counter
   integer max_ticks;
 
-  // ===== Clock =====
-  always #10 CLOCK_50 = ~CLOCK_50;  // 50 MHz
+  // 50 MHz clock
+  always #10 CLOCK_50 = ~CLOCK_50;
 
   // ===== DUT =====
   gamelogic DUT (
@@ -63,118 +62,84 @@ module tb_gamelogic_m2;
     .move_accept(move_accept)
   );
 
-  // -------- Helper tasks --------
+  // ===== Simple helper “tasks” done as inline procedures to avoid decl issues =====
   task pulse_left;
-  begin
-    left_final = 1'b1;
-    @(posedge CLOCK_50);
-    left_final = 1'b0;
-    repeat (3) @(posedge CLOCK_50);
-  end
+    begin
+      left_final = 1'b1;
+      @(posedge CLOCK_50);
+      left_final = 1'b0;
+      repeat (3) @(posedge CLOCK_50);
+    end
   endtask
 
   task pulse_right;
-  begin
-    right_final = 1'b1;
-    @(posedge CLOCK_50);
-    right_final = 1'b0;
-    repeat (3) @(posedge CLOCK_50);
-  end
-  endtask
-
-  task pulse_rot;  // clockwise rotate
-  begin
-    rot_final = 1'b1;
-    @(posedge CLOCK_50);
-    rot_final = 1'b0;
-    repeat (3) @(posedge CLOCK_50);
-  end
-  endtask
-
-  task tick_g;     // one gravity tick
-  begin
-    tick_gravity = 1'b1;
-    @(posedge CLOCK_50);
-    tick_gravity = 1'b0;
-    repeat (2) @(posedge CLOCK_50);
-  end
-  endtask
-
-  // Pretty state/rot decode from LEDR for ModelSim transcript
-  function [79:0] state_name;
-    input [2:0] s;
     begin
-      case (s)
-        3'd0: state_name = "S_IDLE ";
-        3'd1: state_name = "S_SPAWN";
-        3'd2: state_name = "S_FALL ";
-        3'd3: state_name = "S_LOCK ";
-        3'd4: state_name = "S_CLEAR";
-        default: state_name = "UNKNOWN";
-      endcase
+      right_final = 1'b1;
+      @(posedge CLOCK_50);
+      right_final = 1'b0;
+      repeat (3) @(posedge CLOCK_50);
     end
-  endfunction
+  endtask
 
-  // Live monitor (fires on any change)
-  initial begin
-    $display(" time    | state   rot  | move_accept | cur(x,y) | notes");
-    forever begin
-      @(LEDR or cur_x or cur_y or move_accept);
-      $display("%8t | %s  %0d    |     %0b       |  (%0d,%0d) |",
-               $time,
-               state_name(LEDR[7:5]),
-               {LEDR[4],LEDR[3]}, // rot bits as 2-bit value
-               move_accept, cur_x, cur_y);
+  task pulse_rot;
+    begin
+      rot_final = 1'b1;
+      @(posedge CLOCK_50);
+      rot_final = 1'b0;
+      repeat (3) @(posedge CLOCK_50);
     end
+  endtask
+
+  task one_gravity_tick;
+    begin
+      tick_gravity = 1'b1;
+      @(posedge CLOCK_50);
+      tick_gravity = 1'b0;
+      repeat (2) @(posedge CLOCK_50);
+    end
+  endtask
+
+  // ===== Monitoring =====
+  initial begin
+    $display(" time     | state rot | move | (x,y) | score");
+    $monitor("%8t |  %0d    %0d  |  %0b   | (%0d,%0d) | %0d",
+             $time, LEDR[7:5], {LEDR[4],LEDR[3]}, move_accept, cur_x, cur_y, score);
   end
 
-  // Scenario
+  // ===== Scenario =====
   initial begin
-    // Optional VCD (ModelSim can write VCD; if you prefer WLF, comment these)
-    $dumpfile("gamelogic_m2.vcd");
-    $dumpvars(0, tb_gamelogic_m2);
-
-    // Reset sequence
-    resetn = 0;
+    // Reset
+    resetn = 1'b0;
     repeat (10) @(posedge CLOCK_50);
-    resetn = 1;
+    resetn = 1'b1;
     repeat (10) @(posedge CLOCK_50);
 
-    // 1) Rotate once (should advance rot 00->01)
-    $display("=== Rotate once ===");
+    // 1) Rotate once (should update rot bits)
     pulse_rot;
 
-    // 2) Move left 3 times
-    $display("=== Move left 3x ===");
-    pulse_left;
-    pulse_left;
-    pulse_left;
+    // 2) Move left 3x
+    pulse_left; pulse_left; pulse_left;
 
-    // 3) Move right 2 times
-    $display("=== Move right 2x ===");
-    pulse_right;
-    pulse_right;
+    // 3) Move right 2x
+    pulse_right; pulse_right;
 
-    // 4) Apply a few gravity ticks
-    $display("=== Gravity 5 ticks ===");
-    repeat (5) tick_g;
+    // 4) Gravity 5 ticks
+    for (k = 0; k < 5; k = k + 1) begin
+      one_gravity_tick();
+    end
 
-    // 5) “Drop to floor”: tick until S_LOCK then let it settle
-    $display("=== Drop to floor (wait for S_LOCK->S_SPAWN) ===");
-    max_ticks = 40;
-    while ( (LEDR[7:5] != 3'd3) && max_ticks > 0 ) begin // wait until S_LOCK
-      tick_g;
+    // 5) Drop to floor: tick until S_LOCK (state==3) or timeout
+    max_ticks = 60;
+    while ((LEDR[7:5] != 3) && (max_ticks > 0)) begin
+      one_gravity_tick();
       max_ticks = max_ticks - 1;
     end
-    // a few extra cycles to see transition
-    repeat (6) @(posedge CLOCK_50);
 
-    // 6) Quick sanity after respawn
-    $display("=== Post-respawn sanity ===");
-    repeat (5) @(posedge CLOCK_50);
+    // settle a bit
+    repeat (10) @(posedge CLOCK_50);
 
     $display("=== TEST DONE ===");
-    repeat (30) @(posedge CLOCK_50);
+    repeat (20) @(posedge CLOCK_50);
     $finish;
   end
 
