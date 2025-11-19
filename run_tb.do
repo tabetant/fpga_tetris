@@ -1,7 +1,7 @@
 vlib work
 vmap work work
 
-# Compile (adjust filenames if needed)
+# Compile strictly as Verilog (no -sv)
 vlog +acc \
   tetris_piece_offsets.v \
   gamelogic.v \
@@ -9,8 +9,7 @@ vlog +acc \
 
 vsim -voptargs=+acc work.tb_gamelogic_m2
 
-# Waves
-add wave -divider {CLOCK/RESET}
+add wave -divider {CLK/RESET}
 add wave -radix unsigned sim:/tb_gamelogic_m2/CLOCK_50
 add wave sim:/tb_gamelogic_m2/resetn
 
@@ -20,12 +19,13 @@ add wave sim:/tb_gamelogic_m2/right_final
 add wave sim:/tb_gamelogic_m2/rot_final
 add wave sim:/tb_gamelogic_m2/tick_gravity
 
-add wave -divider {DUT status}
+add wave -divider {DUT}
 add wave -radix unsigned sim:/tb_gamelogic_m2/DUT.state
 add wave -radix unsigned sim:/tb_gamelogic_m2/DUT.rot
 add wave -radix unsigned sim:/tb_gamelogic_m2/move_accept
 add wave -radix unsigned sim:/tb_gamelogic_m2/cur_x
 add wave -radix unsigned sim:/tb_gamelogic_m2/cur_y
+add wave -radix unsigned sim:/tb_gamelogic_m2/score
 add wave -radix unsigned sim:/tb_gamelogic_m2/LEDR
 
 run -all
