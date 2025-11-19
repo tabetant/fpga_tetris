@@ -1,5 +1,5 @@
 `timescale 1ns/1ps
-`default_nettype none
+`default_nettype wire   // shield TB from any `default_nettype none` in design
 
 module tetris_tb;
 
@@ -50,19 +50,16 @@ module tetris_tb;
     initial begin
         // Safe initial values
         SW      = 10'd0;
-        KEY     = 4'b0000;     // KEY[3] = 0 -> resetn = 0 inside tetris
-        PS2_CLK = 1'b1;        // PS/2 idle
+        KEY     = 4'b0000;    // KEY[3] = 0 -> resetn = 0 inside tetris
+        PS2_CLK = 1'b1;       // PS/2 idle high
         PS2_DAT = 1'b1;
 
         // Hold reset for a bit
-        #200;                  // 200 ns
-        KEY[3] = 1'b1;         // release reset (resetn = KEY[3])
+        #200;                 // 200 ns
+        KEY[3] = 1'b1;        // release reset (resetn = KEY[3])
 
-        // After this we just let it run.
-        // Gravity tick comes from your tick_g module.
-        // PS/2 is idle (no moves) so you see pure gravity behavior.
+        // After this we just let it run; internal ticks & game logic do their thing
+        // for the 2 s that the .do file will run.
     end
 
 endmodule
-
-`default_nettype wire
