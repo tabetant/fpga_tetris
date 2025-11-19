@@ -1,6 +1,6 @@
 `default_nettype none
 
-module render_box20 (
+module render_box24 (
     input  wire        CLOCK_50,
     input  wire        resetn,      // active-low: 1 = running, 0 = reset
     input  wire        start,       // pulse/high to draw the box once
