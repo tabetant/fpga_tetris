@@ -1,6 +1,6 @@
 transcript on
 onerror {resume}
-onbreak {resume}
+onbreak  {resume}
 
 quietly catch { vdel -lib work -all }
 vlib work
@@ -10,22 +10,25 @@ vlog -sv +acc tetris_piece_offsets.v
 vlog -sv +acc gamelogic.v
 vlog -sv +acc tb_gamelogic_m2.v
 
-vsim -voptargs=+acc work.tb_gamelogic_m2
-
-log -r /*
+vsim -novopt -voptargs=+acc work.tb_gamelogic_m2
 
 quietly .wave clear
 view wave
+log -r /*
+
 add wave sim:/tb_gamelogic_m2/CLOCK_50
 add wave sim:/tb_gamelogic_m2/resetn
 add wave sim:/tb_gamelogic_m2/left_final
 add wave sim:/tb_gamelogic_m2/right_final
 add wave sim:/tb_gamelogic_m2/rot_final
 add wave sim:/tb_gamelogic_m2/tick_gravity
+
+add wave -radix unsigned sim:/tb_gamelogic_m2/**/state
+add wave -radix unsigned sim:/tb_gamelogic_m2/**/rot
+add wave -radix unsigned sim:/tb_gamelogic_m2/**/piece_x
+add wave -radix unsigned sim:/tb_gamelogic_m2/**/piece_y
 add wave -radix unsigned sim:/tb_gamelogic_m2/**/cur_x
 add wave -radix unsigned sim:/tb_gamelogic_m2/**/cur_y
-add wave sim:/tb_gamelogic_m2/**/state
-add wave sim:/tb_gamelogic_m2/**/rot
 add wave sim:/tb_gamelogic_m2/**/move_accept
 add wave sim:/tb_gamelogic_m2/**/collide
 
@@ -62,12 +65,10 @@ force -freeze sim:/tb_gamelogic_m2/tick_gravity \
   1 1800ms, 0 1800ms+20ns, \
   1 1900ms, 0 1900ms+20ns
 
-force -freeze sim:/tb_gamelogic_m2/rot_final   1 250ms, 0 250ms+20ns
-force -freeze sim:/tb_gamelogic_m2/left_final  1 400ms, 0 400ms+20ns
-force -freeze sim:/tb_gamelogic_m2/right_final 1 550ms, 0 550ms+20ns
-force -freeze sim:/tb_gamelogic_m2/rot_final   1 750ms, 0 750ms+20ns
+force -freeze sim:/tb_gamelogic_m2/rot_final    1 250ms, 0 250ms+20ns
+force -freeze sim:/tb_gamelogic_m2/left_final   1 400ms, 0 400ms+20ns
+force -freeze sim:/tb_gamelogic_m2/right_final  1 550ms, 0 550ms+20ns
+force -freeze sim:/tb_gamelogic_m2/rot_final    1 750ms, 0 750ms+20ns
 
 run 2 s
 wave zoom full
-
-quietly set NoQuitOnFinish 1
