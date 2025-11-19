@@ -1,31 +1,44 @@
 `timescale 1ns/1ps
+`default_nettype none  // catch missing declarations in TB
 
 module gamelogic_tb;
 
-    // =============== DUT ports ===============
+    // =====================
+    // DUT ports (inputs)
+    // =====================
+    reg CLOCK_50   = 1'b0;
+    reg resetn     = 1'b0;
 
-    // Inputs
-    reg CLOCK_50;
-    reg resetn;
-    reg left_final, right_final, rot_final;
-    reg tick_gravity;
-    reg board_rdata;
+    reg left_final  = 1'b0;
+    reg right_final = 1'b0;
+    reg rot_final   = 1'b0;
 
-    // Outputs
+    reg tick_gravity = 1'b0;
+
+    reg board_rdata = 1'b0; // treat board as empty for now
+
+    // =====================
+    // DUT ports (outputs)
+    // =====================
     wire [9:0] LEDR;
+
     wire [3:0] board_rx;
     wire [4:0] board_ry;
+
     wire [4:0] score;
+
     wire       board_we;
     wire [3:0] board_wx;
     wire [4:0] board_wy;
     wire       board_wdata;
+
     wire       move_accept;
     wire [3:0] cur_x;
     wire [4:0] cur_y;
 
-    // =============== DUT instance ===============
-    // Ports taken *directly* from your real gamelogic.v
+    // =====================
+    // DUT instance
+    // =====================
     gamelogic dut (
         .LEDR        (LEDR),
         .CLOCK_50    (CLOCK_50),
@@ -53,58 +66,60 @@ module gamelogic_tb;
         .cur_y       (cur_y)
     );
 
-    // =============== 50 MHz clock ===============
-    // Period = 20 ns
+    // =====================
+    // 50 MHz clock
+    // =====================
+    always #10 CLOCK_50 = ~CLOCK_50;  // 20 ns period
+
+    // =====================
+    // Reset & stimulus
+    // =====================
     initial begin
-        CLOCK_50 = 1'b0;
-        forever #10 CLOCK_50 = ~CLOCK_50;
-    end
+        // At time 0 everything is already 0 (see reg initializations above)
 
-    // =============== “Always empty” board ===============
-    // For M2 you can treat the board as empty (no collisions from board_rdata).
-    initial begin
-        board_rdata = 1'b0;
-    end
+        // Hold reset low for 10 clock edges
+        repeat (10) @(posedge CLOCK_50);
+        resetn <= 1'b1;   // release reset
 
-    // =============== Reset + stimulus ===============
-    initial begin
-        // Start in reset with all inputs low
-        resetn      = 1'b0;
-        left_final  = 1'b0;
-        right_final = 1'b0;
-        rot_final   = 1'b0;
-        tick_gravity= 1'b0;
+        // Wait a bit after reset
+        repeat (1000) @(posedge CLOCK_50);  // 1000 cycles ~ 20 us
 
-        // Hold reset for a few cycles so all regs get initialized
-        #200;              // 200 ns → at least 10 clock edges
-        resetn = 1'b1;     // release reset
+        // --- Simple manual moves: 1-cycle pulses ---
+        // Left pulse
+        left_final <= 1'b1;
+        @(posedge CLOCK_50);
+        left_final <= 1'b0;
 
-        // Give the FSM a bit of time before we poke it
-        #100_000;          // 100 µs
+        // wait some cycles
+        repeat (5000) @(posedge CLOCK_50);  // 5000 cycles ~ 100 us
 
-        // A few manual moves (1-clock pulses)
+        // Right pulse
+        right_final <= 1'b1;
+        @(posedge CLOCK_50);
+        right_final <= 1'b0;
 
-        // Move left
-        left_final = 1'b1; #20; left_final = 1'b0;
-        #200_000; // 200 µs gap
+        repeat (5000) @(posedge CLOCK_50);
 
-        // Move right
-        right_final = 1'b1; #20; right_final = 1'b0;
-        #200_000;
+        // Rotate pulse
+        rot_final <= 1'b1;
+        @(posedge CLOCK_50);
+        rot_final <= 1'b0;
 
-        // Rotate
-        rot_final = 1'b1; #20; rot_final = 1'b0;
-
-        // Now just let gravity do the work.
-        // One tick every 20 ms => plenty of motion over 2 seconds.
+        // --- Gravity pulses ---
+        // One gravity tick every 20 ms (1e6 clock cycles at 50 MHz)
+        // Over 2 s we’ll get ~100 ticks.
         repeat (100) begin
-            #20_000_000;         // 20 ms
-            tick_gravity = 1'b1; // 1-clock pulse
-            #20;
-            tick_gravity = 1'b0;
+            // wait 20 ms
+            repeat (1_000_000) @(posedge CLOCK_50);
+            // 1-clock gravity pulse
+            tick_gravity <= 1'b1;
+            @(posedge CLOCK_50);
+            tick_gravity <= 1'b0;
         end
 
-        // After this, the .do file controls total runtime.
+        // After this, ModelSim .do file will end the sim (run 2 s)
     end
 
 endmodule
+
+`default_nettype wire
