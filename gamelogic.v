@@ -347,12 +347,12 @@ output reg       board_wdata;
 
             // capture write list on transition FALL->LOCK
             if (state == S_FALL && next_state == S_LOCK) begin
-                // FIX: Subtract 1 from piece_x to counteract the one-column shift
+                // FIX: Subtract 1 from piece_x to align the locked pieces
                 wx_hold[0] <= piece_x - 4'd1 + dx0_c;
- wy_hold[0] <= piece_y + dy0_c;
+wy_hold[0] <= piece_y + dy0_c;
                 wx_hold[1] <= piece_x - 4'd1 + dx1_c;  wy_hold[1] <= piece_y + dy1_c;
                 wx_hold[2] <= piece_x - 4'd1 + dx2_c;
- wy_hold[2] <= piece_y + dy2_c;
+wy_hold[2] <= piece_y + dy2_c;
                 wx_hold[3] <= piece_x - 4'd1 + dx3_c;  wy_hold[3] <= piece_y + dy3_c;
                 lock_phase <= 2'd0;
  end
