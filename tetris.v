@@ -244,7 +244,7 @@ paint_color     <= 9'd0;
             prev_x          <= 4'd0;
 prev_y          <= 5'd0;
 // IMPORTANT: no full-screen clear on reset
-            clearing        <= 1'b1; // FIX: Changed to 1'b1 to clear the screen on reset
+            clearing        <= 1'b0;
 first_draw      <= 1'b1;  // force one immediate draw of current cell
 
             clr_x           <= 4'd0;
@@ -318,12 +318,14 @@ prev_y     <= cur_y;
 
                 // Otherwise handle the live piece draw/erase FSM
                 end else if (first_draw && ~busy && ~kick) begin
-                    x0          <= {cur_x, 6'b0};
-y0          <= {cur_y, 4'b0} + {cur_y, 3'b0};
-                    paint_color <= piece_color;
+                    // FIX: Erase the stain location (which is held in prev_x/prev_y) first
+                    x0          <= {prev_x, 6'b0};
+y0          <= {prev_y, 4'b0} + {prev_y, 3'b0};
+                    paint_color <= bg_color;
 kick        <= 1'b1;
                     first_draw  <= 1'b0;
-end else begin
+                    draw_seq    <= 2'd1; // Force the FSM to enter the "Draw New" state next
+                end else begin
                     case (draw_seq)
                         2'd0: begin
                             if (need_redraw && ~busy && ~kick) begin
