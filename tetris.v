@@ -308,14 +308,25 @@ board10x20_4r BOARD(
                 else begin
                     case (draw_seq)
                         2'd0: begin
-							if (need_redraw && have_prev && ~busy && ~kick && ~locking) begin
-                                x0          <= {prev_x, 6'b0};
-                                y0          <= {prev_y, 4'b0} + {prev_y, 3'b0};
-                                paint_color <= bg_color;   // erase old
-                                kick        <= 1'b1;
-                                draw_seq    <= 2'd1;
-                            end
-                        end
+  						if (need_redraw && ~busy && ~kick) begin
+    					if (~locking && have_prev) begin
+      					// normal path: erase old, then we'll draw new in state 1
+      					x0          <= {prev_x, 6'b0};
+      					y0          <= {prev_y, 4'b0} + {prev_y, 3'b0};
+      					paint_color <= bg_color;
+      					kick        <= 1'b1;
+      					draw_seq    <= 2'd1;
+    					end else begin
+      					// cannot/shouldn't erase (locking just wrote board, or no prev yet):
+      					// draw the current cell immediately
+      					x0          <= {cur_x, 6'b0};
+      					y0          <= {cur_y, 4'b0} + {cur_y, 3'b0};
+      					paint_color <= piece_color;
+      					kick        <= 1'b1;
+      					draw_seq    <= 2'd2;   // go finalize to set prev_*
+    			end
+  			end
+		end
                         2'd1: begin
                             if (done && ~busy && ~kick) begin
                                 x0          <= {cur_x, 6'b0};
