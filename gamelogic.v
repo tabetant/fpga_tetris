@@ -26,33 +26,45 @@
 // 3 - if all conditions keep collide = 0 , accept the move:
 // piece_x += dX, piece_y += dY, rot = new_rot
 
-module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tick_gravity, r0, r1, r2, r3, rx0, ry0, rx1, ry1, rx2, ry2, rx3, ry3, board_we, board_wx, board_wy, board_wdata, score, cur_x, cur_y, move_accept);
-    input CLOCK_50, resetn;
+module gamelogic(
+    LEDR, CLOCK_50, resetn,
+    left_final, right_final, rot_final,
+    tick_gravity,
+    r0, r1, r2, r3,
+    rx0, ry0, rx1, ry1, rx2, ry2, rx3, ry3,
+    board_we, board_wx, board_wy, board_wdata,
+    score, cur_x, cur_y, move_accept
+);
+    input  CLOCK_50, resetn;
 
     // testing + sanity check
     output [9:0] LEDR;
 	
     // input debounced clean pulses
-    input left_final, right_final, rot_final;
+    input  left_final, right_final, rot_final;
 
-    input tick_gravity; // gravity timer
+    input  tick_gravity; // gravity timer
 
-    // board reading
-	 
     // gamelogic port deltas
 	// inputs from board:
-	input  r0, r1, r2, r3,
+	input  r0, r1, r2, r3;
 	// outputs to board for reads:
-	output [3:0] rx0, rx1, rx2, rx3,
-	output [4:0] ry0, ry1, ry2, ry3,
+	output [3:0] rx0, rx1, rx2, rx3;
+	output [4:0] ry0, ry1, ry2, ry3;
 	// write port:
-	output reg board_we,
-	output reg [3:0] board_wx,
-	output reg [4:0] board_wy,
-	output reg board_wdata,
-	
-	output reg [4:0] score;
+	output reg       board_we;
+	output reg [3:0] board_wx;
+	output reg [4:0] board_wy;
+	output reg       board_wdata;
 
+    // next-state version of write port (registered on clock)
+    reg       next_board_we;
+    reg [3:0] next_board_wx;
+    reg [4:0] next_board_wy;
+    reg       next_board_wdata;
+
+	// scoreboard
+	output reg [4:0] score;
 
     // FSM states
     parameter S_IDLE = 3'd0, S_SPAWN = 3'd1, S_FALL = 3'd2, S_LOCK = 3'd3, S_CLEAR = 3'd4;
@@ -71,19 +83,19 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
     // lock state
     reg [1:0] lock_i;
 
-	reg signed [2:0] dX_lat, dY_lat;
-	reg              want_rot_lat;
-	reg       [1:0]  new_rot_lat;
+	reg  signed [2:0] dX_lat, dY_lat;
+	reg               want_rot_lat;
+	reg        [1:0]  new_rot_lat;
 	
     // move logic
-    output move_accept; // set in "fall", checked before accepting move at clock cycle
-    reg want_left, want_right, want_rot, want_grav;
-    reg [1:0] dRot;
-    reg have_action;
-    reg signed [2:0] dX, dY;
+    output            move_accept; // set in "fall", checked before accepting move at clock cycle
+    reg               want_left, want_right, want_rot, want_grav;
+    reg        [1:0]  dRot;
+    reg               have_action;
+    reg  signed [2:0] dX, dY;
 
-    reg collide; // for violations
-    reg [1:0] new_rot; // target rot (rot+dRot) % 4
+    reg               collide; // for violations
+    reg        [1:0]  new_rot; // target rot (rot+dRot) % 4
 
     // VGA
 
@@ -115,17 +127,15 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
         .dx3(dx3_t), .dy3(dy3_t)
     );
 
-
     // for S_LOCK
     reg [1:0] lock_phase;   // 0..3
     reg [3:0] wx_hold [0:3];
     reg [4:0] wy_hold [0:3];
 
     // compute target piece and check collision
-
     reg collide_bounds;
 
-   wire signed [5:0] piece_x_s = $signed({1'b0, piece_x}); // 0..9 -> 0..9
+    wire signed [5:0] piece_x_s = $signed({1'b0, piece_x}); // 0..9 -> 0..9
 	wire signed [6:0] piece_y_s = $signed({2'b00, piece_y}); // 0..19
 
 	// Proposed deltas as signed (latched combinationally in S_FALL)
@@ -160,7 +170,6 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
 	assign rx2 = tx2_clamp; assign ry2 = ty2_clamp;
 	assign rx3 = tx3_clamp; assign ry3 = ty3_clamp;
 
-	
 	always @* begin
   		collide_bounds = 1'b0;
   		// X in [0..9], Y in [0..19]
@@ -170,8 +179,7 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
   		if (tx3_s < 0 || tx3_s > 9 || ty3_s < 0 || ty3_s > 19) collide_bounds = 1'b1;
 	end
 
-    always@*
-    begin
+    always @* begin
         dX = 0;
         dY = 0;
         next_state = state;
@@ -182,77 +190,80 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
         dRot = 0;
         collide = 0;
         new_rot = rot;
-        board_we = 1'b0;
-        board_wdata = 1'b0;
-        board_wx = 4'd0;
-        board_wy = 5'd0; 
-        case(state)
-            S_IDLE: next_state = S_SPAWN;
-            S_SPAWN: 
-				begin
-                board_we = 1'b0;
+
+        // default next board outputs (registered later)
+        next_board_we    = 1'b0;
+        next_board_wdata = 1'b0;
+        next_board_wx    = 4'd0;
+        next_board_wy    = 5'd0;
+
+        case (state)
+            S_IDLE: begin
+                next_state = S_SPAWN;
+            end
+
+            S_SPAWN: begin
                 if (collide)
                     next_state = S_FALL; // next_state = S_GAME_OVER : to be implemented later;
-                else 
-                begin
+                else
                     next_state = S_FALL;
-                end
-				end
-            S_FALL: 
-			begin
-                if (left_final) 
-                begin
+            end
+
+            S_FALL: begin
+                if (left_final) begin
                     dRot = 0;
                     want_left = 1;
                     dX = -1;
                 end
-                else if (right_final)
-                begin
+                else if (right_final) begin
                     dRot = 0;
                     want_right = 1;
                     dX = 1;
                 end
-                else if (rot_final)
-                begin
+                else if (rot_final) begin
                     want_rot = 1;
                     dRot = 1;
                 end
-                else if(tick_gravity)
-                begin
+                else if (tick_gravity) begin
                     want_grav = 1;
                     dY = 1;
                 end
+
                 new_rot = (rot + dRot) & 2'b11;
                 have_action = (want_left || want_right || want_rot || want_grav);
+
+                // board collision OR bounds
                 collide = collide_bounds | (r0 | r1 | r2 | r3);
+
                 if (have_action) begin
-    			if (collide) begin
-        			if (want_grav)
-            				next_state = S_LOCK;   // landed on something or floor
-        			else
-            		next_state = S_FALL;   // ignore side/rotate collisions
-    			end
-				end
+                    if (collide) begin
+                        if (want_grav)
+                            next_state = S_LOCK;   // landed on something or floor
+                        else
+                            next_state = S_FALL;   // ignore side/rotate collisions
+                    end
+                end
             end
-            S_LOCK: // write the 4 blocks of active piece into board memory
-            begin
-                // write one cell per cycle
-                board_we = 1'b1;
-                board_wdata = 1'b1;
+
+            S_LOCK: begin
+                // write one cell per cycle (registered on clock)
+                next_board_we    = 1'b1;
+                next_board_wdata = 1'b1;
                 case (lock_phase)
-                    2'd0: begin board_wx = wx_hold[0]; board_wy = wy_hold[0]; end
-                    2'd1: begin board_wx = wx_hold[1]; board_wy = wy_hold[1]; end
-                    2'd2: begin board_wx = wx_hold[2]; board_wy = wy_hold[2]; end
-                    2'd3: begin board_wx = wx_hold[3]; board_wy = wy_hold[3]; end
+                    2'd0: begin next_board_wx = wx_hold[0]; next_board_wy = wy_hold[0]; end
+                    2'd1: begin next_board_wx = wx_hold[1]; next_board_wy = wy_hold[1]; end
+                    2'd2: begin next_board_wx = wx_hold[2]; next_board_wy = wy_hold[2]; end
+                    2'd3: begin next_board_wx = wx_hold[3]; next_board_wy = wy_hold[3]; end
                 endcase
-    
                 next_state = (lock_phase == 2'd3) ? S_SPAWN : S_LOCK;
             end
 
-            S_CLEAR: next_state = S_SPAWN; // will change for next milestone
-            default: begin 
+            S_CLEAR: begin
+                next_state = S_SPAWN; // will change for next milestone
+            end
+
+            default: begin
                 next_state = S_IDLE;
-                board_we = 1'b0;
             end
         endcase
     end
@@ -264,86 +275,99 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
 	wire signed [5:0] piece_x_next_s = $signed({1'b0, piece_x}) + $signed({{2{dX_lat[2]}}, dX_lat}); // 0..9 + (-4..+3)
 	wire signed [6:0] piece_y_next_s = $signed({2'b0, piece_y}) + $signed({{3{dY_lat[2]}}, dY_lat}); // 0..19 + (-4..+3)
 
-    always@(posedge CLOCK_50)
-    begin
-        if(!resetn)
-        begin
+    always @(posedge CLOCK_50 or negedge resetn) begin
+        if (!resetn) begin
     		dX_lat        <= 3'sd0;
     		dY_lat        <= 3'sd0;
     		want_rot_lat  <= 1'b0;
     		new_rot_lat   <= 2'd0;
-			move_commit <= 1'b0;
-            lock_phase <= 0;
-            state <= S_IDLE;
-            piece_x <= 0;
-            piece_y <= 0;
-            rot <= 0;
-            shape_id <= 0;
-            lock_i <= 0;
-            board_we <= 0;
-            board_wdata <= 0;
-            board_wx <= 0;
-            board_wy <= 0;
-            spawn_x <= 4'd4;
-            spawn_y <= 5'd0;
-            score <= 0;
+			move_commit   <= 1'b0;
+
+            lock_phase    <= 2'd0;
+            state         <= S_IDLE;
+            piece_x       <= 4'd0;
+            piece_y       <= 5'd0;
+            rot           <= 2'd0;
+            shape_id      <= 3'd0;
+            lock_i        <= 2'd0;
+
+            board_we      <= 1'b0;
+            board_wdata   <= 1'b0;
+            board_wx      <= 4'd0;
+            board_wy      <= 5'd0;
+
+            spawn_x       <= 4'd4;
+            spawn_y       <= 5'd0;
+            score         <= 5'd0;
         end
-        else
-        begin
+        else begin
 			move_commit <= 1'b0;
+
+            // advance FSM
+            state <= next_state;
+
+            // drive current display cell (for painter)
             cur_x <= piece_x;
             cur_y <= piece_y;
-            state <= next_state;
+
+            // latch a move to commit at next clock if valid in S_FALL
 			if (state == S_FALL && will_move) begin
-      			move_commit <= 1'b1;       // fire the commit pulse
-				dX_lat       <= dX;        // latch deltas
-      			dY_lat       <= dY;
-      			want_rot_lat <= want_rot;
-      			new_rot_lat  <= new_rot;
+      			move_commit   <= 1'b1;
+				dX_lat        <= dX;
+      			dY_lat        <= dY;
+      			want_rot_lat  <= want_rot;
+      			new_rot_lat   <= new_rot;
     		end
+
+            // commit position/rotation on the pulse
 			if (move_commit) begin
 				piece_x <= piece_x_next_s[3:0];
 				piece_y <= piece_y_next_s[4:0];
       			if (want_rot_lat) rot <= new_rot_lat;
     		end
-                if(state == S_SPAWN)
-                begin
-                    shape_id <= 0;
-                    rot <= 0;
-                    piece_x <= spawn_x;
-                    piece_y <= spawn_y;
-                end
-                if(state == S_FALL && next_state == S_LOCK)
-                begin
-                    // prepare write list for LOCK (using current rot)
-                    wx_hold[0] <= piece_x + dx0_c;
-                    wy_hold[0] <= piece_y + dy0_c;
-                    wx_hold[1] <= piece_x + dx1_c;
-                    wy_hold[1] <= piece_y + dy1_c;
-                    wx_hold[2] <= piece_x + dx2_c;
-                    wy_hold[2] <= piece_y + dy2_c;
-                    wx_hold[3] <= piece_x + dx3_c;
-                    wy_hold[3] <= piece_y + dy3_c;
+
+            // spawn a fresh piece
+            if (state == S_SPAWN) begin
+                shape_id <= 3'd0;
+                rot      <= 2'd0;
+                piece_x  <= spawn_x;
+                piece_y  <= spawn_y;
+            end
+
+            // capture write list on transition FALL->LOCK
+            if (state == S_FALL && next_state == S_LOCK) begin
+                wx_hold[0] <= piece_x + dx0_c;  wy_hold[0] <= piece_y + dy0_c;
+                wx_hold[1] <= piece_x + dx1_c;  wy_hold[1] <= piece_y + dy1_c;
+                wx_hold[2] <= piece_x + dx2_c;  wy_hold[2] <= piece_y + dy2_c;
+                wx_hold[3] <= piece_x + dx3_c;  wy_hold[3] <= piece_y + dy3_c;
+                lock_phase <= 2'd0;
+            end
+
+            // perform board write during S_LOCK (one cell per cycle)
+            board_we    <= next_board_we;
+            board_wdata <= next_board_wdata;
+            board_wx    <= next_board_wx;
+            board_wy    <= next_board_wy;
+
+            // advance lock phase and bump score
+            if (state == S_LOCK) begin
+                if (lock_phase == 2'd3) begin
                     lock_phase <= 2'd0;
+                    if (score != 5'd31)
+                        score <= score + 5'd1;
+                    else
+                        score <= score;
                 end
-                if (state == S_LOCK)
-                begin
-                    if (lock_phase == 2'd3) 
-					begin
-                        lock_phase <= 2'd0;
-                        if (score != 5'd31) 
-                            score <= score + 5'd1;
-                        else
-                            score <= score;  // hold at max
-					end
-                    else 
-                        lock_phase <= lock_phase + 2'd1; 
-                end   
+                else begin
+                    lock_phase <= lock_phase + 2'd1;
+                end
+            end
         end
-end
+    end
+
 	assign move_accept = move_commit; 
     assign LEDR[7:5] = state;
     assign LEDR[0]   = move_accept;
-    assign LEDR[1] = have_action & collide;
+    assign LEDR[1]   = have_action & collide;
     assign LEDR[2]   = tick_gravity;
 endmodule
