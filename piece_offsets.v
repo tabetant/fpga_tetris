@@ -16,10 +16,14 @@ module tetris_piece_offsets (
 
     // O (no visible rotation)
     if (shape_id == 3'd0) begin
-      dx0 = 4'sd1; dy0 = 4'sd1;
-      dx1 = 4'sd2; dy1 = 4'sd1;
-      dx2 = 4'sd1; dy2 = 4'sd2;
-      dx3 = 4'sd2; dy3 = 4'sd2;
+      dx0 = 4'sd0;
+      dy0 = 4'sd1;
+      dx1 = 4'sd1; 
+      dy1 = 4'sd1;
+      dx2 = 4'sd0; 
+      dy2 = 4'sd2;
+      dx3 = 4'sd1; 
+      dy3 = 4'sd2;
 
     // I
     end else if (shape_id == 3'd1 && (rot == 2'd0 || rot == 2'd2)) begin
