@@ -8,10 +8,10 @@
 // px_top = ORIGIN_Y + y * CELL_H
 // ORIGIN (x = 0, y = 0) maps to pixels [0:63]x[0:23]
 // BOTTOM RIGHT (x = 9, y = 19) maps to 
- pixels [576:639]x[456:479]
+ // pixels [576:639]x[456:479]
 // proposed moves: (dX, dY, dRot)
 // left (-1,0,0) ; right (+1,0,0); rotate(0,0, 1 mod 4);
- gravity (0, +1, 0)
+ // gravity (0, +1, 0)
 // need a lookup table for the shapes: offsets[shape_id][rot][0:3] = (dx, dy)
 // for each shape, have 4 diff rotations (1 at 0 deg (default), at 90, at 180, then back to 0 (hence the mod 4))
 // CLOCKWISE ROTATION
@@ -22,10 +22,10 @@
 // (dx[i], dy[i]) = offsets[shape_id][new_rot][i]
 // tx[i] = piece_x + dX + dx[i]
 // ty[i] = piece_y + 
- dY + dy[i]
+ // dY + dy[i]
 // 2 - bounds check
 // if tx < 0 | tx > 63 |
- ty > 23 => collide = 1 (illegal)
+ // ty > 23 => collide = 1 (illegal)
 // if read_cell(tx, ty) == 1, collide == 1
 // 3 - if all conditions keep collide = 0 , accept the move:
 // piece_x += dX, piece_y += dY, rot = new_rot
@@ -59,8 +59,7 @@ module gamelogic(
 	output reg       board_we;
 	output reg [3:0] board_wx;
 	output reg [4:0] board_wy;
-// output reg       board_wdata; // This line was a bit off, but keeping the original structure below
-output reg       board_wdata;
+ output reg       board_wdata;
 
     // next-state version of write port (registered on clock)
     reg       next_board_we;
@@ -294,7 +293,6 @@ output reg       board_wdata;
  dY_lat        <= 3'sd0;
     		want_rot_lat  <= 1'b0;
     		new_rot_lat   <= 2'd0;
- new_rot_lat   <= 2'd0;
  move_commit   <= 1'b0;
 
             lock_phase    <= 2'd0;
@@ -339,7 +337,7 @@ output reg       board_wdata;
 
             // spawn a fresh piece
             if (state == S_SPAWN) begin
-                shape_id <= 3'd0;
+                shape_id <= 3'd1; // FIX: Lock to I-piece (ID 1)
  rot      <= 2'd0;
                 piece_x  <= spawn_x;
                 piece_y  <= spawn_y;
@@ -347,13 +345,13 @@ output reg       board_wdata;
 
             // capture write list on transition FALL->LOCK
             if (state == S_FALL && next_state == S_LOCK) begin
-                // FIX: Subtract 1 from piece_x to align the locked pieces
-                wx_hold[0] <= piece_x - 4'd1 + dx0_c;
-wy_hold[0] <= piece_y + dy0_c;
-                wx_hold[1] <= piece_x - 4'd1 + dx1_c;  wy_hold[1] <= piece_y + dy1_c;
-                wx_hold[2] <= piece_x - 4'd1 + dx2_c;
-wy_hold[2] <= piece_y + dy2_c;
-                wx_hold[3] <= piece_x - 4'd1 + dx3_c;  wy_hold[3] <= piece_y + dy3_c;
+                // FIX: Removed the piece_x - 4'd1 correction that caused the X-1 shift.
+                wx_hold[0] <= piece_x + dx0_c;
+ wy_hold[0] <= piece_y + dy0_c;
+                wx_hold[1] <= piece_x + dx1_c;  wy_hold[1] <= piece_y + dy1_c;
+                wx_hold[2] <= piece_x + dx2_c;
+ wy_hold[2] <= piece_y + dy2_c;
+                wx_hold[3] <= piece_x + dx3_c;  wy_hold[3] <= piece_y + dy3_c;
                 lock_phase <= 2'd0;
  end
 
