@@ -182,7 +182,7 @@ board10x20_4r BOARD(
     reg locking;
 	reg [1:0] lock_draw_count;
 	reg prev_board_we;
-
+	reg have_prev;
 	
     // =========================================================
     // Painter and cell→pixel mapping
@@ -216,6 +216,7 @@ board10x20_4r BOARD(
 
     always @(posedge CLOCK_50 or negedge resetn) begin
         if (!resetn) begin
+			have_prev <= 0;
             prev_accept <= 1'b0;
             prev_tick   <= 1'b0;
 			locking          <= 1'b0;
@@ -246,7 +247,7 @@ board10x20_4r BOARD(
             kick <= 1'b0;
 			
 			// detect board writes (LOCK phase) and draw the cell immediately
-			if (board_we && board_wdata && ~busy && ~kick) begin
+			if (board_we && ~prev_board_we && board_wdata && ~busy && ~kick) begin
     		// treat this period as “locking” so we don't erase the last position
     		locking <= 1'b1;
     		lock_draw_count <= lock_draw_count + 2'd1;
@@ -260,6 +261,12 @@ board10x20_4r BOARD(
     		// after the 4th write has been painted, exit locking mode
     		locking          <= 1'b0;
     		lock_draw_count  <= 2'd0;
+			have_prev <= 0;
+				
+			// reset redraw baseline so we don't erase a locked square
+  			prev_x     <= cur_x;
+  			prev_y     <= cur_y;
+  			first_draw <= 1'b1;    // force a fresh draw at the new spawn
 			end
 			
             if (clearing) begin
@@ -301,7 +308,7 @@ board10x20_4r BOARD(
                 else begin
                     case (draw_seq)
                         2'd0: begin
-							if (need_redraw && ~busy && ~kick && ~locking) begin
+							if (need_redraw && have_prev && ~busy && ~kick && ~locking) begin
                                 x0          <= {prev_x, 6'b0};
                                 y0          <= {prev_y, 4'b0} + {prev_y, 3'b0};
                                 paint_color <= bg_color;   // erase old
@@ -323,6 +330,7 @@ board10x20_4r BOARD(
                                 prev_x   <= cur_x;
                                 prev_y   <= cur_y;
                                 draw_seq <= 2'd0;
+								have_prev <= 1'b1;
                             end
                         end
                         default: draw_seq <= 2'd0;
