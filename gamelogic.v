@@ -80,9 +80,6 @@ module gamelogic(
     reg [3:0] piece_x; // 0 to 9
     reg [4:0] piece_y; // 0 to 19
 
-    // lock state
-    reg [1:0] lock_i;
-
 	reg  signed [2:0] dX_lat, dY_lat;
 	reg               want_rot_lat;
 	reg        [1:0]  new_rot_lat;
@@ -289,7 +286,6 @@ module gamelogic(
             piece_y       <= 5'd0;
             rot           <= 2'd0;
             shape_id      <= 3'd0;
-            lock_i        <= 2'd0;
 
             board_we      <= 1'b0;
             board_wdata   <= 1'b0;
