@@ -30,6 +30,15 @@ module tetris(
         .tick_input(tick_input)
     );
 
+	wire blink_unused;
+	tick_g gravity (
+  	.CLOCK_50   (CLOCK_50),
+  	.resetn     (resetn),
+  	.score      (score),
+  	.tick_gravity(tick_gravity),
+  	.blink      (blink_unused)
+	);
+
     // =========================================================
     // PS/2 keyboard controller and key decode
     // =========================================================
