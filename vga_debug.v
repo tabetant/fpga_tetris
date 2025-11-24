@@ -1,4 +1,13 @@
-Error (10170): Verilog HDL syntax error at board.v(52) near text: "[";  expecting ";". Check for and fix any syntax errors that appear immediately before or at the specified keyword. The Intel FPGA Knowledge Database contains many articles with specific details on how to resolve this error. Visit the Knowledge Database at https://www.altera.com/support/support-resources/knowledge-base/search.html and search for this specific error message number.
-Error (10170): Verilog HDL syntax error at board.v(53) near text: "[";  expecting ";". Check for and fix any syntax errors that appear immediately before or at the specified keyword. The Intel FPGA Knowledge Database contains many articles with specific details on how to resolve this error. Visit the Knowledge Database at https://www.altera.com/support/support-resources/knowledge-base/search.html and search for this specific error message number.
-Error (10170): Verilog HDL syntax error at board.v(54) near text: "[";  expecting ";". Check for and fix any syntax errors that appear immediately before or at the specified keyword. The Intel FPGA Knowledge Database contains many articles with specific details on how to resolve this error. Visit the Knowledge Database at https://www.altera.com/support/support-resources/knowledge-base/search.html and search for this specific error message number.
-Error (10170): Verilog HDL syntax error at board.v(55) near text: "[";  expecting ";". Check for and fix any syntax errors that appear immediately before or at the specified keyword. The Intel FPGA Knowledge Database contains many articles with specific details on how to resolve this error. Visit the Knowledge Database at https://www.altera.com/support/support-resources/knowledge-base/search.html and search for this specific error message number.
+Error (10028): Can't resolve multiple constant drivers for net "board_we" at gamelogic.v(189)
+Error (10029): Constant driver at gamelogic.v(267)
+Error (10028): Can't resolve multiple constant drivers for net "board_wx[3]" at gamelogic.v(189)
+Error (10028): Can't resolve multiple constant drivers for net "board_wx[2]" at gamelogic.v(189)
+Error (10028): Can't resolve multiple constant drivers for net "board_wx[1]" at gamelogic.v(189)
+Error (10028): Can't resolve multiple constant drivers for net "board_wx[0]" at gamelogic.v(189)
+Error (10028): Can't resolve multiple constant drivers for net "board_wy[4]" at gamelogic.v(189)
+Error (10028): Can't resolve multiple constant drivers for net "board_wy[3]" at gamelogic.v(189)
+Error (10028): Can't resolve multiple constant drivers for net "board_wy[2]" at gamelogic.v(189)
+Error (10028): Can't resolve multiple constant drivers for net "board_wy[1]" at gamelogic.v(189)
+Error (10028): Can't resolve multiple constant drivers for net "board_wy[0]" at gamelogic.v(189)
+Error (10028): Can't resolve multiple constant drivers for net "board_wdata" at gamelogic.v(189)
+Error (12152): Can't elaborate user hierarchy "gamelogic:GAME"
