@@ -26,7 +26,7 @@
 // 3 - if all conditions keep collide = 0 , accept the move:
 // piece_x += dX, piece_y += dY, rot = new_rot
 
-module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tick_gravity, r0, r1, r2, r3, rx0, ry0, rx1, ry1, rx2, ry2, rx3, ry3, board_rdata, board_rx, board_ry, board_we, board_wx, board_wy, board_wdata, score, cur_x, cur_y, move_accept);
+module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tick_gravity, r0, r1, r2, r3, rx0, ry0, rx1, ry1, rx2, ry2, rx3, ry3, board_we, board_wx, board_wy, board_wdata, score, cur_x, cur_y, move_accept);
     input CLOCK_50, resetn;
 
     // testing + sanity check
@@ -46,11 +46,13 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
 	output [3:0] rx0, rx1, rx2, rx3,
 	output [4:0] ry0, ry1, ry2, ry3,
 	// write port:
-	output board_we,
-	output [3:0] board_wx,
-	output [4:0] board_wy,
-	output board_wdata,
-	 
+	output reg board_we,
+	output reg [3:0] board_wx,
+	output reg [4:0] board_wy,
+	output reg board_wdata,
+	
+	output reg [4:0] score;
+
 
     // FSM states
     parameter S_IDLE = 3'd0, S_SPAWN = 3'd1, S_FALL = 3'd2, S_LOCK = 3'd3, S_CLEAR = 3'd4;
@@ -141,18 +143,31 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
 	wire signed [6:0] ty2_s = piece_y_s + dY_s + $signed({{3{dy2_t[3]}}, dy2_t});
 	wire signed [6:0] ty3_s = piece_y_s + dY_s + $signed({{3{dy3_t[3]}}, dy3_t});
 
-	assign rx0 = tx0_s; assign ry0 = ty0_s;
-	assign rx1 = tx1_s; assign ry1 = ty1_s;
-	assign rx2 = tx2_s; assign ry2 = ty2_s;
-	assign rx3 = tx3_s; assign ry3 = ty3_s;
+	// clamp for safe board addressing
+	wire [3:0] tx0_clamp = (tx0_s < 0) ? 4'd0 : (tx0_s > 9)  ? 4'd9  : tx0_s[3:0];
+	wire [3:0] tx1_clamp = (tx1_s < 0) ? 4'd0 : (tx1_s > 9)  ? 4'd9  : tx1_s[3:0];
+	wire [3:0] tx2_clamp = (tx2_s < 0) ? 4'd0 : (tx2_s > 9)  ? 4'd9  : tx2_s[3:0];
+	wire [3:0] tx3_clamp = (tx3_s < 0) ? 4'd0 : (tx3_s > 9)  ? 4'd9  : tx3_s[3:0];
+
+	wire [4:0] ty0_clamp = (ty0_s < 0) ? 5'd0 : (ty0_s > 19) ? 5'd19 : ty0_s[4:0];
+	wire [4:0] ty1_clamp = (ty1_s < 0) ? 5'd0 : (ty1_s > 19) ? 5'd19 : ty1_s[4:0];
+	wire [4:0] ty2_clamp = (ty2_s < 0) ? 5'd0 : (ty2_s > 19) ? 5'd19 : ty2_s[4:0];
+	wire [4:0] ty3_clamp = (ty3_s < 0) ? 5'd0 : (ty3_s > 19) ? 5'd19 : ty3_s[4:0];
+
+	// drive board read taps
+	assign rx0 = tx0_clamp; assign ry0 = ty0_clamp;
+	assign rx1 = tx1_clamp; assign ry1 = ty1_clamp;
+	assign rx2 = tx2_clamp; assign ry2 = ty2_clamp;
+	assign rx3 = tx3_clamp; assign ry3 = ty3_clamp;
+
 	
 	always @* begin
   		collide_bounds = 1'b0;
   		// X in [0..9], Y in [0..19]
-  		if (tx0_s < 0 || tx0_s > 9 || ty0_s > 19) collide_bounds = 1'b1;
-  		if (tx1_s < 0 || tx1_s > 9 || ty1_s > 19) collide_bounds = 1'b1;
-  		if (tx2_s < 0 || tx2_s > 9 || ty2_s > 19) collide_bounds = 1'b1;
-  		if (tx3_s < 0 || tx3_s > 9 || ty3_s > 19) collide_bounds = 1'b1;
+  		if (tx0_s < 0 || tx0_s > 9 || ty0_s < 0 || ty0_s > 19) collide_bounds = 1'b1;
+  		if (tx1_s < 0 || tx1_s > 9 || ty1_s < 0 || ty1_s > 19) collide_bounds = 1'b1;
+  		if (tx2_s < 0 || tx2_s > 9 || ty2_s < 0 || ty2_s > 19) collide_bounds = 1'b1;
+  		if (tx3_s < 0 || tx3_s > 9 || ty3_s < 0 || ty3_s > 19) collide_bounds = 1'b1;
 	end
 
     always@*
@@ -167,8 +182,6 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
         dRot = 0;
         collide = 0;
         new_rot = rot;
-        board_rx = piece_x;
-        board_ry = piece_y;
         board_we = 1'b0;
         board_wdata = 1'b0;
         board_wx = 4'd0;
@@ -267,14 +280,10 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
             rot <= 0;
             shape_id <= 0;
             lock_i <= 0;
-				/*
             board_we <= 0;
             board_wdata <= 0;
             board_wx <= 0;
             board_wy <= 0;
-            board_rx <= 0;
-            board_ry <= 0;
-				*/
             spawn_x <= 4'd4;
             spawn_y <= 5'd0;
             score <= 0;
