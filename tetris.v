@@ -178,9 +178,12 @@ board10x20_4r BOARD(
   .rx3(rx3), .ry3(ry3), .r3(r3)
 );
 
-
+	// lock state
+    reg locking;
+	reg [1:0] lock_draw_count;
+	
     // =========================================================
-    // Painter handshake and cell→pixel mapping
+    // Painter and cell→pixel mapping
     // =========================================================
     reg        kick;
     wire       done, busy;
@@ -213,8 +216,26 @@ board10x20_4r BOARD(
         if (!resetn) begin
             prev_accept <= 1'b0;
             prev_tick   <= 1'b0;
+			locking          <= 1'b0;
+			lock_draw_count  <= 2'd0;
 
             kick        <= 1'b0;
+			// detect board writes (LOCK phase) and draw the cell immediately
+			if (board_we && board_wdata && ~busy && ~kick) begin
+    		// treat this period as “locking” so we don't erase the last position
+    		locking <= 1'b1;
+    		lock_draw_count <= lock_draw_count + 2'd1;
+
+    		// draw locked block at board_wx, board_wy in piece color
+    		x0          <= {board_wx, 6'b0};                           // col * 64
+    		y0          <= {board_wy, 4'b0} + {board_wy, 3'b0};        // row * 24
+    		paint_color <= piece_color;
+    		kick        <= 1'b1;
+			end else if (locking && lock_draw_count == 2'd3 && done && ~busy && ~kick) begin
+    		// after the 4th write has been painted, exit locking mode
+    		locking          <= 1'b0;
+    		lock_draw_count  <= 2'd0;
+			end
             draw_seq    <= 2'd0;
 
             prev_x      <= 4'd0;
@@ -276,7 +297,7 @@ board10x20_4r BOARD(
                 else begin
                     case (draw_seq)
                         2'd0: begin
-                            if (need_redraw && ~busy && ~kick) begin
+							if (need_redraw && ~busy && ~kick && ~locking) begin
                                 x0          <= {prev_x, 6'b0};
                                 y0          <= {prev_y, 4'b0} + {prev_y, 3'b0};
                                 paint_color <= bg_color;   // erase old
