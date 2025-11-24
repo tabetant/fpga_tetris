@@ -236,6 +236,9 @@ module tetris(
     // ------------------------------
     // Painter control
     // ------------------------------
+
+    reg [3:0]  bwx_latched;
+    reg [4:0]  bwy_latched;
     always @(posedge CLOCK_50 or negedge resetn) begin
         if (!resetn) begin
             prev_accept     <= 1'b0;
@@ -263,7 +266,13 @@ module tetris(
 
             clr_x           <= 4'd0;
             clr_y           <= 5'd0;
+            bwx_latched <= 4'd0;
+            bwy_latched <= 5'd0;
         end else begin
+            if (board_we && ~prev_board_we) begin
+              bwx_latched <= board_wx;
+              bwy_latched <= board_wy;
+            end
             prev_accept   <= move_accept;
             prev_tick     <= tick_gravity;
             prev_board_we <= board_we;
@@ -272,8 +281,8 @@ module tetris(
 
             // ====== Enqueue locked cells on rising edge of board write ======
             if (board_we && ~prev_board_we && board_wdata) begin
-                lock_qx[lock_wr_ptr] <= board_wx;
-                lock_qy[lock_wr_ptr] <= board_wy;
+                lock_qx[lock_wr_ptr] <= bwx_latched;
+                lock_qy[lock_wr_ptr] <= bwy_latched;
                 lock_wr_ptr          <= lock_wr_ptr + 2'd1;
                 locking              <= 1'b1;      // while lock-draws pending, suppress erase of live piece
             end
@@ -332,7 +341,7 @@ module tetris(
                     case (draw_seq)
                         2'd0: begin
                             if (need_redraw && ~busy && ~kick) begin
-                                if (~locking && have_prev) begin
+                                if (~locking && have_prev && lock_q_empty) begin
                                     // erase old trail
                                     x0          <= {prev_x, 6'b0};
                                     y0          <= {prev_y, 4'b0} + {prev_y, 3'b0};
