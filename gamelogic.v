@@ -26,7 +26,7 @@
 // 3 - if all conditions keep collide = 0 , accept the move:
 // piece_x += dX, piece_y += dY, rot = new_rot
 
-module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tick_gravity, board_rdata, board_rx, board_ry, board_we, board_wx, board_wy, board_wdata, score, cur_x, cur_y, move_accept);
+module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tick_gravity, r0, r1, r2, r3, rx0, ry0, rx1, ry1, rx2, ry2, rx3, ry3, board_rdata, board_rx, board_ry, board_we, board_wx, board_wy, board_wdata, score, cur_x, cur_y, move_accept);
     input CLOCK_50, resetn;
 
     // testing + sanity check
@@ -39,16 +39,17 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
 
     // board reading
 	 
-    input board_rdata; // 1 if (board_rx, board_ry) is occupied
-    output reg [3:0] board_rx;
-    output reg [4:0] board_ry;
-    output reg [4:0] score;
-
-    // board writing
-    output reg board_we; // 1-cycle write enable
-    output reg [3:0] board_wx; // writing X address
-    output reg [4:0] board_wy; // writing Y address
-    output reg board_wdata; // 1 to set cell occupied
+    // gamelogic port deltas
+	// inputs from board:
+	input  r0, r1, r2, r3,
+	// outputs to board for reads:
+	output [3:0] rx0, rx1, rx2, rx3,
+	output [4:0] ry0, ry1, ry2, ry3,
+	// write port:
+	output board_we,
+	output [3:0] board_wx,
+	output [4:0] board_wy,
+	output board_wdata,
 	 
 
     // FSM states
@@ -140,6 +141,11 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
 	wire signed [6:0] ty2_s = piece_y_s + dY_s + $signed({{3{dy2_t[3]}}, dy2_t});
 	wire signed [6:0] ty3_s = piece_y_s + dY_s + $signed({{3{dy3_t[3]}}, dy3_t});
 
+	assign rx0 = tx0_s; assign ry0 = ty0_s;
+	assign rx1 = tx1_s; assign ry1 = ty1_s;
+	assign rx2 = tx2_s; assign ry2 = ty2_s;
+	assign rx3 = tx3_s; assign ry3 = ty3_s;
+	
 	always @* begin
   		collide_bounds = 1'b0;
   		// X in [0..9], Y in [0..19]
@@ -205,7 +211,7 @@ module gamelogic(LEDR, CLOCK_50, resetn, left_final, right_final, rot_final, tic
                 end
                 new_rot = (rot + dRot) & 2'b11;
                 have_action = (want_left || want_right || want_rot || want_grav);
-                collide = collide_bounds;
+                collide = collide_bounds | (r0 | r1 | r2 | r3);
                 if (have_action) begin
     			if (collide) begin
         			if (want_grav)
