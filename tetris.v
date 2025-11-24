@@ -30,16 +30,6 @@ module tetris(
         .tick_input(tick_input)
     );
 
-    // assuming tick_g: (CLOCK_50, resetn, tick_gravity, blink, score)
-    wire blink_unused;
-    tick_g gravity (
-        .CLOCK_50    (CLOCK_50),
-        .resetn      (resetn),
-        .tick_gravity(tick_gravity),
-        .blink       (blink_unused),
-        .score       (score)
-    );
-
     // =========================================================
     // PS/2 keyboard controller and key decode
     // =========================================================
@@ -122,13 +112,7 @@ module tetris(
     // =========================================================
     // Board wires (not used for M2; RAM can be added later)
     // =========================================================
-    wire        board_we;
-    wire [3:0]  board_wx, board_rx;
-    wire [4:0]  board_wy, board_ry;
-    wire        board_wdata, board_rdata;
-
-    assign board_rdata = 1'b0;
-    // board10x20 BOARD (...);
+    
 
     // =========================================================
     // Core game
@@ -137,26 +121,54 @@ module tetris(
     wire [4:0] cur_y;
     wire       move_accept;
 
-    gamelogic GAME(
-        .LEDR        (LEDR),
-        .CLOCK_50    (CLOCK_50),
-        .resetn      (resetn),
-        .left_final  (left_final),
-        .right_final (right_final),
-        .rot_final   (rot_final),
-        .tick_gravity(tick_gravity),
-        .board_rdata (board_rdata),
-        .board_rx    (board_rx),
-        .board_ry    (board_ry),
-        .board_we    (board_we),
-        .board_wx    (board_wx),
-        .board_wy    (board_wy),
-        .board_wdata (board_wdata),
-        .score       (score),
-        .cur_x       (cur_x),
-        .cur_y       (cur_y),
-        .move_accept      (move_accept)
-    );
+    // Board wires
+wire        board_we;
+wire [3:0]  board_wx;
+wire [4:0]  board_wy;
+wire        board_wdata;
+
+wire [3:0]  rx0, rx1, rx2, rx3;
+wire [4:0]  ry0, ry1, ry2, ry3;
+wire        r0, r1, r2, r3;
+
+// Game core
+gamelogic GAME(
+  .LEDR(LEDR),
+  .CLOCK_50(CLOCK_50),
+  .resetn(resetn),
+  .left_final(left_final),
+  .right_final(right_final),
+  .rot_final(rot_final),
+  .tick_gravity(tick_gravity),
+  .r0(r0), .r1(r1), .r2(r2), .r3(r3),
+  .rx0(rx0), .ry0(ry0),
+  .rx1(rx1), .ry1(ry1),
+  .rx2(rx2), .ry2(ry2),
+  .rx3(rx3), .ry3(ry3),
+  .board_we(board_we),
+  .board_wx(board_wx),
+  .board_wy(board_wy),
+  .board_wdata(board_wdata),
+  .score(score),
+  .cur_x(cur_x),
+  .cur_y(cur_y),
+  .move_accept(move_accept)
+);
+
+// Board instance
+board10x20_4r BOARD(
+  .clk(CLOCK_50),
+  .resetn(resetn),
+  .we(board_we),
+  .wx(board_wx),
+  .wy(board_wy),
+  .wdata(board_wdata),
+  .rx0(rx0), .ry0(ry0), .r0(r0),
+  .rx1(rx1), .ry1(ry1), .r1(r1),
+  .rx2(rx2), .ry2(ry2), .r2(r2),
+  .rx3(rx3), .ry3(ry3), .r3(r3)
+);
+
 
     // =========================================================
     // Painter handshake and cell→pixel mapping
