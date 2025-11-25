@@ -112,6 +112,9 @@ pending_event p_rot (
     wire [3:0] cur_x;
 wire [4:0] cur_y;
     wire       move_accept;
+    wire [2:0] cur_shape_id; // Added to get shape info
+    wire [1:0] cur_rot;      // Added to get rotation info
+    wire signed [3:0] dx0_c, dy0_c, dx1_c, dy1_c, dx2_c, dy2_c, dx3_c, dy3_c; // Added for live draw offsets
 // Board wires
     wire        board_we;
     wire [3:0]  board_wx;
@@ -144,7 +147,13 @@ wire [4:0]  ry0, ry1, ry2, ry3;
         .cur_x      (cur_x),
    
       .cur_y      (cur_y),
-        .move_accept(move_accept)
+        .move_accept(move_accept),
+        .cur_shape_id (cur_shape_id), // Passed out
+        .cur_rot      (cur_rot),      // Passed out
+        .dx0_c(dx0_c), .dy0_c(dy0_c),
+        .dx1_c(dx1_c), .dy1_c(dy1_c),
+        .dx2_c(dx2_c), .dy2_c(dy2_c),
+        .dx3_c(dx3_c), .dy3_c(dy3_c)
     );
 // Board instance
     board10x20_4r BOARD(
@@ -177,8 +186,8 @@ reg [8:0]  paint_color;
     reg [3:0] prev_x;
 reg [4:0] prev_y;
     reg       have_prev;
-// draw FSM for live piece
-    reg [1:0] draw_seq;
+reg [1:0] draw_seq;
+    reg [1:0] draw_index; // FIX: New register to iterate 4 blocks
 // trigger redraws
     reg  prev_accept, prev_tick;
     wire new_accept  = move_accept  & ~prev_accept;
@@ -219,6 +228,15 @@ reg  [4:0] lock_qy [0:3];
         .VGA_SYNC_N  (VGA_SYNC_N),
         .VGA_CLK     (VGA_CLK)
     );
+
+    // Wires to dynamically select the correct offset for the current draw_index
+    wire signed [3:0] current_dx, current_dy;
+    assign current_dx = (draw_index == 2'd0) ? dx0_c :
+                        (draw_index == 2'd1) ? dx1_c :
+                        (draw_index == 2'd2) ? dx2_c : dx3_c;
+    assign current_dy = (draw_index == 2'd0) ? dy0_c :
+                        (draw_index == 2'd1) ? dy1_c :
+                        (draw_index == 2'd2) ? dy2_c : dy3_c;
 // ------------------------------
     // Painter control
     // ------------------------------
@@ -236,6 +254,7 @@ lock_rd_ptr     <= 2'd0;
 
             have_prev       <= 1'b0;
 draw_seq        <= 2'd0;
+draw_index      <= 2'd0; // Reset new index
 kick            <= 1'b0;
 x0              <= 10'd0;
 y0              <= 9'd0;
@@ -319,59 +338,72 @@ prev_y     <= cur_y;
                 // Otherwise handle the live piece draw/erase FSM
                 end else if (first_draw && ~busy && ~kick) begin
                     // FIX: Erase the stain location (which is held in prev_x/prev_y) first
-                    x0          <= {prev_x, 6'b0};
-y0          <= {prev_y, 4'b0} + {prev_y, 3'b0};
+                    x0          <= {prev_x + dx0_c, 6'b0}; // Use the offset
+                    y0          <= {prev_y + dy0_c, 4'b0} + {prev_y + dy0_c, 3'b0};
                     paint_color <= bg_color;
-kick        <= 1'b1;
+                    kick        <= 1'b1;
                     first_draw  <= 1'b0;
-                    draw_seq    <= 2'd1; // Force the FSM to enter the "Draw New" state next
+                    draw_seq    <= 2'd1; // Next state is S_ERASE, starting draw_index at 0
+                    draw_index  <= 2'd0; // Reset index
                 end else begin
                     case (draw_seq)
-                        2'd0: begin
+                        2'd0: begin // S_CHECK (Original: S_IDLE)
                             if (need_redraw && ~busy && ~kick) begin
                   
-                              if (~locking && have_prev && lock_q_empty) begin
-                                    // erase old trail
-                                    x0     
-         <= {prev_x, 6'b0};
-                                    y0          <= {prev_y, 4'b0} + {prev_y, 3'b0};
-paint_color <= bg_color;
-                                    kick        <= 1'b1;
-                                    draw_seq    <= 2'd1;
-end else begin
-                                    // cannot/shouldn't erase (no prev yet or locking in progress)
-                                    x0          <= {cur_x, 6'b0};
-y0          <= {cur_y, 4'b0} + {cur_y, 3'b0};
-                                    paint_color <= piece_color;
-kick        <= 1'b1;
-                                    draw_seq    <= 2'd2;
-// finalize to set prev_*
+                                if (~locking && have_prev && lock_q_empty) begin
+                                    draw_seq    <= 2'd1; // Go to S_ERASE
+                                    draw_index  <= 2'd0; // Start erase iteration
+                                end else begin
+                                    draw_seq    <= 2'd2; // Go to S_DRAW (no erase needed)
+                                    draw_index  <= 2'd0; // Start draw iteration
                                 end
                             end
                         end
             
-                        2'd1: begin
+                        2'd1: begin // S_ERASE (Original: S_DRAWX)
                             if (done && ~busy && ~kick) begin
-                                // draw new
-                   
-                                x0          <= {cur_x, 6'b0};
-y0          <= {cur_y, 4'b0} + {cur_y, 3'b0};
-                                paint_color <= piece_color;
-kick        <= 1'b1;
-                                draw_seq    <= 2'd2;
-end
+                                if (draw_index == 2'd3) begin
+                                    // Erase complete, move to draw
+                                    draw_seq    <= 2'd2; // Go to S_DRAW
+                                    draw_index  <= 2'd0; // Start draw iteration
+                                end else begin
+                                    // Erase next block
+                                    x0          <= {prev_x + current_dx, 6'b0};
+                                    y0          <= {prev_y + current_dy, 4'b0} + {prev_y + current_dy, 3'b0};
+                                    paint_color <= bg_color;
+                                    kick        <= 1'b1;
+                                    draw_index  <= draw_index + 2'd1;
+                                end
+                            end
                         end
-                        2'd2: begin
+                        
+                        2'd2: begin // S_DRAW (Original: S_NEXTY)
+                            if (done && ~busy && ~kick) begin
+                                if (draw_index == 2'd3) begin
+                                    // Draw complete, finalize
+                                    draw_seq    <= 2'd3; // Go to S_FINALIZE
+                                    draw_index  <= 2'd0;
+                                end else begin
+                                    // Draw next block
+                                    x0          <= {cur_x + current_dx, 6'b0};
+                                    y0          <= {cur_y + current_dy, 4'b0} + {cur_y + current_dy, 3'b0};
+                                    paint_color <= piece_color;
+                                    kick        <= 1'b1;
+                                    draw_index  <= draw_index + 2'd1;
+                                end
+                            end
+                        end
+                        
+                        2'd3: begin // S_FINALIZE (Original: S_DONE)
                             if (done && ~busy) begin
-                   
-                                prev_x   <= cur_x;
-prev_y   <= cur_y;
-                                have_prev<= 1'b1;
-                                draw_seq <= 2'd0;
-end
+                                prev_x      <= cur_x;
+                                prev_y      <= cur_y;
+                                have_prev   <= 1'b1;
+                                draw_seq    <= 2'd0; // Go to S_CHECK
+                            end
                         end
                         default: draw_seq <= 2'd0;
-endcase
+                    endcase
                 end
             end
         end
