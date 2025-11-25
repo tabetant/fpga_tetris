@@ -434,7 +434,7 @@ module tetris(
     end
 
     wire [6:0] h_tens, h_units;
-    SevSegDecoder s(score, h_tens, h_units);
+    SevSegDecoder_5bit s(score, h_tens, h_units);
     assign HEX0 = ~h_units;
     assign HEX1 = ~h_tens;
 
