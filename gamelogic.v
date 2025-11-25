@@ -38,9 +38,9 @@ module gamelogic(
     rx0, ry0, rx1, ry1, rx2, ry2, rx3, ry3,
     board_we, board_wx, board_wy, board_wdata,
     score, cur_x, cur_y, move_accept,
-    output wire [2:0] cur_shape_id,
-    output wire [1:0] cur_rot,
-    output wire signed [3:0] dx0_c, dy0_c, dx1_c, dy1_c, dx2_c, dy2_c, dx3_c, dy3_c
+    cur_shape_id,
+    cur_rot,
+    dx0_c, dy0_c, dx1_c, dy1_c, dx2_c, dy2_c, dx3_c, dy3_c
 );
  input  CLOCK_50, resetn;
 
@@ -50,6 +50,10 @@ module gamelogic(
     input  left_final, right_final, rot_final;
 
     input  tick_gravity;
+	 
+	 output wire [2:0] cur_shape_id;
+    output wire [1:0] cur_rot;
+    output wire signed [3:0] dx0_c, dy0_c, dx1_c, dy1_c, dx2_c, dy2_c, dx3_c, dy3_c;
 // gravity timer
 
     // gamelogic port deltas
