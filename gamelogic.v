@@ -15,7 +15,7 @@ module gamelogic(
     output wire [1:0] cur_rot;
     output wire signed [3:0] dx0_c, dy0_c, dx1_c, dy1_c, dx2_c, dy2_c, dx3_c, dy3_c;
     output wire game_over;
-	 input  CLOCK_50, resetn;
+    input  CLOCK_50, resetn;
     output [9:0] LEDR;
     input  left_final, right_final, rot_final;
     input  tick_gravity;
@@ -36,8 +36,8 @@ module gamelogic(
 
     output reg [4:0] score;
     
-    // FSM states
-    parameter S_IDLE = 3'd0, S_SPAWN = 3'd1, S_FALL = 3'd2, S_LOCK = 3'd3, S_CLEAR = 3'd4, S_GAME_OVER = 3'd5; 
+    // FSM states: Added S_CHECK_SPAWN (6) to fix Game Over timing
+    parameter S_IDLE = 3'd0, S_SPAWN = 3'd1, S_FALL = 3'd2, S_LOCK = 3'd3, S_CLEAR = 3'd4, S_GAME_OVER = 3'd5, S_CHECK_SPAWN = 3'd6; 
     reg [2:0] state, next_state;
     
     assign game_over = (state == S_GAME_OVER);
@@ -153,10 +153,13 @@ module gamelogic(
                 next_state = S_SPAWN;
             end
             S_SPAWN: begin
-                if (collide)
-                    next_state = S_GAME_OVER; 
-                else
-                    next_state = S_FALL;
+                // Go to Check Spawn to allow coordinates to settle before checking collide
+                next_state = S_CHECK_SPAWN; 
+            end
+            S_CHECK_SPAWN: begin
+                // Now we check if the newly spawned piece overlaps anything
+                if (collide) next_state = S_GAME_OVER;
+                else next_state = S_FALL;
             end
             S_FALL: begin
                 if (left_final) begin
