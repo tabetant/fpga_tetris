@@ -38,9 +38,9 @@ module gamelogic(
     rx0, ry0, rx1, ry1, rx2, ry2, rx3, ry3,
     board_we, board_wx, board_wy, board_wdata,
     score, cur_x, cur_y, move_accept,
-    output wire [2:0] cur_shape_id, // Added
-    output wire [1:0] cur_rot,      // Added
-    output wire signed [3:0] dx0_c, dy0_c, dx1_c, dy1_c, dx2_c, dy2_c, dx3_c, dy3_c // Added
+    output wire [2:0] cur_shape_id,
+    output wire [1:0] cur_rot,
+    output wire signed [3:0] dx0_c, dy0_c, dx1_c, dy1_c, dx2_c, dy2_c, dx3_c, dy3_c
 );
  input  CLOCK_50, resetn;
 
@@ -79,8 +79,8 @@ module gamelogic(
     // tetromino shape and rotation 
     reg [1:0] rot;
     reg [2:0] shape_id;
-    assign cur_shape_id = shape_id; // Added output
-    assign cur_rot = rot;           // Added output
+    assign cur_shape_id = shape_id;
+    assign cur_rot = rot;
 // coordinate logic
     reg [3:0] spawn_x;
     reg [4:0] spawn_y;
@@ -110,7 +110,7 @@ module gamelogic(
  output reg [4:0] cur_y;
 	
     // current rotation (for LOCK writes)
-    wire signed [3:0] dx0_c, dy0_c, dx1_c, dy1_c, dx2_c, dy2_c, dx3_c, dy3_c; // Moved from local to output
+    // Removed redundant wire declaration: wire signed [3:0] dx0_c, dy0_c, dx1_c, dy1_c, dx2_c, dy2_c, dx3_c, dy3_c;
 // trial rotation (for collision test of this move)
     wire signed [3:0] dx0_t, dy0_t, dx1_t, dy1_t, dx2_t, dy2_t, dx3_t, dy3_t;
  tetris_piece_offsets OFF_CUR (
@@ -342,7 +342,7 @@ module gamelogic(
 
             // spawn a fresh piece
             if (state == S_SPAWN) begin
-                shape_id <= 3'd1; // FIX: Lock to I-piece (ID 1)
+                shape_id <= 3'd1; // Locked to I-piece
  rot      <= 2'd0;
                 piece_x  <= spawn_x;
                 piece_y  <= spawn_y;
@@ -350,7 +350,6 @@ module gamelogic(
 
             // capture write list on transition FALL->LOCK
             if (state == S_FALL && next_state == S_LOCK) begin
-                // FIX: Reverted to original logic (removed X-correction)
                 wx_hold[0] <= piece_x + dx0_c;
  wy_hold[0] <= piece_y + dy0_c;
                 wx_hold[1] <= piece_x + dx1_c;  wy_hold[1] <= piece_y + dy1_c;
