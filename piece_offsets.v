@@ -16,7 +16,7 @@ always @* begin
     dx3 = 4'sd0; dy3 = 4'sd0;
 // O (no visible rotation)
     if (shape_id == 3'd0) begin
-      dx0 = 4'sd0; // FIX: Centered the O-piece offsets by -1
+      dx0 = 4'sd0; // FIX: Centered O-piece offset
  dy0 = 4'sd1;
       dx1 = 4'sd1; dy1 = 4'sd1;
       dx2 = 4'sd0; dy2 = 4'sd2;
