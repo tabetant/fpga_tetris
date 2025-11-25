@@ -3,7 +3,7 @@
 // Top-level: PS/2 keys -> clean pulses -> gamelogic -> painter.
 // Clearing pass is disabled on reset to avoid the blank-screen issue for M2.
 module tetris(
-    SW, KEY, CLOCK_50, LEDR, PS2_CLK, PS2_DAT,
+    SW, KEY, CLOCK_50, LEDR, HEX0, HEX1, PS2_CLK, PS2_DAT,
     VGA_R, VGA_G, VGA_B, VGA_HS, VGA_VS, VGA_BLANK_N, VGA_SYNC_N, VGA_CLK
 );
     input  wire [9:0] SW;
@@ -13,6 +13,7 @@ module tetris(
 
     output wire [7:0] VGA_R, VGA_G, VGA_B;
     output wire       VGA_HS, VGA_VS, VGA_BLANK_N, VGA_SYNC_N, VGA_CLK;
+    output wire [6:0] HEX0, HEX1; // score display
     // active–high resetn (KEY[3] not pressed = 1)
     wire resetn = KEY[3];
     // =========================================================
@@ -422,5 +423,10 @@ module tetris(
             end
         end
     end
+
+    wire [6:0] h_tens, h_units;
+    SevSegDecoder_5bit s(score, h_tens, h_units);
+    assign HEX0 = ~h_units;
+    assign HEX1 = ~h_tens;
 
 endmodule
