@@ -176,7 +176,10 @@ module tetris(
     reg [8:0]  paint_color;
 
     wire [8:0] piece_color = 9'b111_000_111; // magenta
-    wire [8:0] bg_color    = 9'b111_111_111; // white erase
+    
+    // FIX: Set Background Color to BLACK to match the screen background
+    // Original was 9'b111_111_111 (White), which caused white trails.
+    wire [8:0] bg_color    = 9'b000_000_000; // Black erase
 
     // remember last cell (for live piece trail erase)
     reg [3:0] prev_x;
@@ -270,13 +273,11 @@ module tetris(
             kick <= 1'b0; // Default kick to 0 to create pulses
 
             // ====== Enqueue locked cells ======
-            // FIX: Removed ~prev_board_we. Now enqueues all 4 blocks when board_we is high.
             if (board_we && board_wdata) begin
                 lock_qx[lock_wr_ptr] <= board_wx;
                 lock_qy[lock_wr_ptr] <= board_wy;
                 lock_wr_ptr          <= lock_wr_ptr + 2'd1;
                 locking              <= 1'b1;
-                // while lock-draws pending, suppress erase of live piece
             end
 
             // ====== Clearing pass (disabled at reset, kept for later) ======
@@ -338,7 +339,6 @@ module tetris(
                             if (need_redraw && ~busy && ~kick) begin
                                 if (~locking && have_prev && lock_q_empty) begin
                                     // PREPARE ERASE: Kick off block 0 immediately
-                                    // Note: draw_index is 0 here from previous S_FINALIZE reset
                                     x0          <= {prev_x + dx0_c, 6'b0};
                                     y0          <= {prev_y + dy0_c, 4'b0} + {prev_y + dy0_c, 3'b0};
                                     paint_color <= bg_color;
@@ -371,16 +371,7 @@ module tetris(
                                     draw_seq    <= 2'd2; // Go to S_DRAW
                                     draw_index  <= 2'd0;
                                 end else begin
-                                    // Kick next erase block
-                                    // Note: we use draw_index + 1 for the offset lookup logic? 
-                                    // No, we rely on the register updating.
-                                    // We assign x0 using the *updated* draw_index in the next cycle? 
-                                    // No, we must calculate x0 based on the NEXT index.
-                                    
-                                    // Helper wires for NEXT index:
-                                    // To allow clean code, we'll just set registers here.
-                                    // We need to multiplex manually since draw_index isn't updated yet.
-                                    
+                                    // Kick next erase block (offset + 1)
                                     case (draw_index)
                                         2'd0: begin x0 <= {prev_x + dx1_c, 6'b0}; y0 <= {prev_y + dy1_c, 4'b0} + {prev_y + dy1_c, 3'b0}; end
                                         2'd1: begin x0 <= {prev_x + dx2_c, 6'b0}; y0 <= {prev_y + dy2_c, 4'b0} + {prev_y + dy2_c, 3'b0}; end
