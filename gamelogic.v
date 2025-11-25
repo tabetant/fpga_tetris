@@ -40,7 +40,8 @@ module gamelogic(
     score, cur_x, cur_y, move_accept,
     output wire [2:0] cur_shape_id,
     output wire [1:0] cur_rot,
-    output wire signed [3:0] dx0_c, dy0_c, dx1_c, dy1_c, dx2_c, dy2_c, dx3_c, dy3_c
+    output wire signed [3:0] dx0_c, dy0_c, dx1_c, dy1_c, dx2_c, dy2_c, dx3_c, dy3_c,
+    output wire game_over // Added output
 );
     input  CLOCK_50, resetn;
 
@@ -72,9 +73,12 @@ module gamelogic(
 
 	// scoreboard
 	output reg [4:0] score;
-    // FSM states
-    parameter S_IDLE = 3'd0, S_SPAWN = 3'd1, S_FALL = 3'd2, S_LOCK = 3'd3, S_CLEAR = 3'd4;
+    [cite_start]// FSM states [cite: 35]
+    parameter S_IDLE = 3'd0, S_SPAWN = 3'd1, S_FALL = 3'd2, S_LOCK = 3'd3, S_CLEAR = 3'd4, S_GAME_OVER = 3'd5; 
     reg [2:0] state, next_state;
+    
+    // Output game_over signal based on state
+    assign game_over = (state == S_GAME_OVER);
 
     // tetromino shape and rotation 
     reg [1:0] rot;
@@ -110,7 +114,6 @@ module gamelogic(
     output reg [4:0] cur_y;
 	
     // current rotation (for LOCK writes)
-    // Removed redundant wire declaration: wire signed [3:0] dx0_c, dy0_c, dx1_c, dy1_c, dx2_c, dy2_c, dx3_c, dy3_c;
     // trial rotation (for collision test of this move)
     wire signed [3:0] dx0_t, dy0_t, dx1_t, dy1_t, dx2_t, dy2_t, dx3_t, dy3_t;
     tetris_piece_offsets OFF_CUR (
@@ -208,8 +211,7 @@ module gamelogic(
 
             S_SPAWN: begin
                 if (collide)
-                    next_state = S_FALL;
-                // next_state = S_GAME_OVER : to be implemented later;
+                    next_state = S_GAME_OVER; [cite_start]// FIX: Go to Game Over if spawn collide [cite: 83]
                 else
                     next_state = S_FALL;
             end
@@ -270,6 +272,11 @@ module gamelogic(
                 endcase
                 next_state = (lock_phase == 2'd3) ?
                 S_SPAWN : S_LOCK;
+            end
+            
+            // New Game Over State: Infinite Loop
+            S_GAME_OVER: begin
+                 next_state = S_GAME_OVER;
             end
 
             S_CLEAR: begin
@@ -351,7 +358,7 @@ module gamelogic(
 
             // spawn a fresh piece
             if (state == S_SPAWN) begin
-                shape_id <= rand_cnt; // FIX: Assign random shape from counter
+                shape_id <= rand_cnt; // Assign random shape
                 rot      <= 2'd0;
                 piece_x  <= spawn_x;
                 piece_y  <= spawn_y;
