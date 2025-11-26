@@ -1,298 +1,414 @@
-module gamelogic(
-    LEDR, CLOCK_50, resetn,
-    left_final, right_final, rot_final,
-    tick_gravity,
-    r0, r1, r2, r3,
-    rx0, ry0, rx1, ry1, rx2, ry2, rx3, ry3,
-    board_we, board_wx, board_wy, board_wdata,
-    score, cur_x, cur_y, move_accept,
-     cur_shape_id,
-     cur_rot,
-    dx0_c, dy0_c, dx1_c, dy1_c, dx2_c, dy2_c, dx3_c, dy3_c,
-     game_over,
-     random_shape // NEW INPUT
+`default_nettype none
+
+module tetris(
+    SW, KEY, CLOCK_50, LEDR, HEX0, HEX1, PS2_CLK, PS2_DAT,
+    VGA_R, VGA_G, VGA_B, VGA_HS, VGA_VS, VGA_BLANK_N, VGA_SYNC_N, VGA_CLK
 );
-    output wire [2:0] cur_shape_id;
-    output wire [1:0] cur_rot;
-    output wire signed [3:0] dx0_c, dy0_c, dx1_c, dy1_c, dx2_c, dy2_c, dx3_c, dy3_c;
-    output wire game_over;
-    input wire [2:0] random_shape; // Input from the randomiser module
+    input  wire [9:0] SW;
+    input  wire [3:0] KEY;
+    input  wire       CLOCK_50;
+    output wire [9:0] LEDR;
 
-    input  CLOCK_50, resetn;
-    output [9:0] LEDR;
-    input  left_final, right_final, rot_final;
-    input  tick_gravity;
+    output wire [7:0] VGA_R, VGA_G, VGA_B;
+    output wire       VGA_HS, VGA_VS, VGA_BLANK_N, VGA_SYNC_N, VGA_CLK;
+    output wire [6:0] HEX0, HEX1; // score display
 
-    // gamelogic port deltas
-    input  r0, r1, r2, r3;
-    output [3:0] rx0, rx1, rx2, rx3;
-    output [4:0] ry0, ry1, ry2, ry3;
-    output reg       board_we;
-    output reg [3:0] board_wx;
-    output reg [4:0] board_wy;
-    output reg       board_wdata;
-
-    reg       next_board_we;
-    reg [3:0] next_board_wx;
-    reg [4:0] next_board_wy;
-    reg       next_board_wdata;
-
-    output reg [4:0] score;
+    // active–high resetn (KEY[3] not pressed = 1)
+    wire resetn = KEY[3];
     
-    // FSM states
-    parameter S_IDLE = 3'd0, S_SPAWN = 3'd1, S_FALL = 3'd2, S_LOCK = 3'd3, S_CLEAR = 3'd4, S_GAME_OVER = 3'd5, S_CHECK_SPAWN = 3'd6; 
-    reg [2:0] state, next_state;
-    
-    assign game_over = (state == S_GAME_OVER);
+    // =========================================================
+    // Ticks
+    // =========================================================
+    wire [4:0] score;
+    wire       tick_input, tick_gravity;
 
-    reg [1:0] rot;
-    reg [2:0] shape_id;
-    assign cur_shape_id = shape_id;
-    assign cur_rot = rot;
-
-    reg [3:0] spawn_x;
-    reg [4:0] spawn_y;
-    reg [3:0] piece_x;
-    reg [4:0] piece_y;
-
-    reg  signed [2:0] dX_lat, dY_lat;
-    reg               want_rot_lat;
-    reg        [1:0]  new_rot_lat;
-    output            move_accept;
-    
-    reg               want_left, want_right, want_rot, want_grav;
-    reg        [1:0]  dRot;
-    reg               have_action;
-    reg  signed [2:0] dX, dY;
-
-    reg               collide;
-    reg        [1:0]  new_rot;
-
-    output reg [3:0] cur_x;
-    output reg [4:0] cur_y;
-    
-    // Offsets
-    wire signed [3:0] dx0_t, dy0_t, dx1_t, dy1_t, dx2_t, dy2_t, dx3_t, dy3_t;
-    
-    tetris_piece_offsets OFF_CUR (
-        .shape_id (shape_id),
-        .rot      (rot),  
-        .dx0(dx0_c), .dy0(dy0_c),
-        .dx1(dx1_c), .dy1(dy1_c),
-        .dx2(dx2_c), .dy2(dy2_c),
-        .dx3(dx3_c), .dy3(dy3_c)
+    tick_i in (
+        .CLOCK_50   (CLOCK_50),
+        .resetn     (resetn),
+        .tick_input (tick_input)
+    );
+    wire blink_unused;
+    tick_g gravity (
+        .CLOCK_50     (CLOCK_50),
+        .resetn       (resetn),
+        .score        (score),
+        .tick_gravity (tick_gravity),
+        .blink        (blink_unused)
     );
 
-    tetris_piece_offsets OFF_TRY (
-        .shape_id (shape_id),
-        .rot      (new_rot),  
-        .dx0(dx0_t), .dy0(dy0_t),
-        .dx1(dx1_t), .dy1(dy1_t),
-        .dx2(dx2_t), .dy2(dy2_t),
-        .dx3(dx3_t), .dy3(dy3_t)
+    // =========================================================
+    // PS/2 keyboard controller and key decode
+    // =========================================================
+    input  wire PS2_CLK;
+    input  wire PS2_DAT;
+    wire  [7:0] ps2_key_data;
+    wire        ps2_key_pressed;
+    PS2_Interface PS2 (
+        .CLOCK_50        (CLOCK_50),
+        .resetn          (resetn),
+        .PS2_CLK         (PS2_CLK),
+        .PS2_DAT         (PS2_DAT),
+        .scan_code       (ps2_key_data),
+        .scan_code_valid (ps2_key_pressed)
     );
+    
+    reg left_ps2_pulse, right_ps2_pulse, rot_ps2_pulse;
+    always @(posedge CLOCK_50 or negedge resetn) begin
+        if (!resetn) begin
+            left_ps2_pulse  <= 1'b0;
+            right_ps2_pulse <= 1'b0;
+            rot_ps2_pulse   <= 1'b0;
+        end else begin
+            left_ps2_pulse  <= 1'b0;
+            right_ps2_pulse <= 1'b0;
+            rot_ps2_pulse   <= 1'b0;
 
-    reg [1:0] lock_phase;
-    reg [3:0] wx_hold [0:3];
-    reg [4:0] wy_hold [0:3];
-
-    reg collide_bounds;
-    wire signed [5:0] piece_x_s = $signed({1'b0, piece_x}); 
-    wire signed [6:0] piece_y_s = $signed({2'b00, piece_y});
-
-    wire signed [5:0] dX_s = $signed({{3{dX[2]}}, dX});
-    wire signed [6:0] dY_s = $signed({{4{dY[2]}}, dY});
-
-    wire signed [5:0] tx0_s = piece_x_s + dX_s + $signed({{2{dx0_t[3]}}, dx0_t});
-    wire signed [5:0] tx1_s = piece_x_s + dX_s + $signed({{2{dx1_t[3]}}, dx1_t});
-    wire signed [5:0] tx2_s = piece_x_s + dX_s + $signed({{2{dx2_t[3]}}, dx2_t});
-    wire signed [5:0] tx3_s = piece_x_s + dX_s + $signed({{2{dx3_t[3]}}, dx3_t});
-    wire signed [6:0] ty0_s = piece_y_s + dY_s + $signed({{3{dy0_t[3]}}, dy0_t});
-    wire signed [6:0] ty1_s = piece_y_s + dY_s + $signed({{3{dy1_t[3]}}, dy1_t});
-    wire signed [6:0] ty2_s = piece_y_s + dY_s + $signed({{3{dy2_t[3]}}, dy2_t});
-    wire signed [6:0] ty3_s = piece_y_s + dY_s + $signed({{3{dy3_t[3]}}, dy3_t});
-
-    wire [3:0] tx0_clamp = (tx0_s < 0) ? 4'd0 : (tx0_s > 9) ? 4'd9 : tx0_s[3:0];
-    wire [3:0] tx1_clamp = (tx1_s < 0) ? 4'd0 : (tx1_s > 9) ? 4'd9 : tx1_s[3:0];
-    wire [3:0] tx2_clamp = (tx2_s < 0) ? 4'd0 : (tx2_s > 9) ? 4'd9 : tx2_s[3:0];
-    wire [3:0] tx3_clamp = (tx3_s < 0) ? 4'd0 : (tx3_s > 9) ? 4'd9 : tx3_s[3:0];
-
-    wire [4:0] ty0_clamp = (ty0_s < 0) ? 5'd0 : (ty0_s > 19) ? 5'd19 : ty0_s[4:0];
-    wire [4:0] ty1_clamp = (ty1_s < 0) ? 5'd0 : (ty1_s > 19) ? 5'd19 : ty1_s[4:0];
-    wire [4:0] ty2_clamp = (ty2_s < 0) ? 5'd0 : (ty2_s > 19) ? 5'd19 : ty2_s[4:0];
-    wire [4:0] ty3_clamp = (ty3_s < 0) ? 5'd0 : (ty3_s > 19) ? 5'd19 : ty3_s[4:0];
-
-    assign rx0 = tx0_clamp; assign ry0 = ty0_clamp;
-    assign rx1 = tx1_clamp; assign ry1 = ty1_clamp;
-    assign rx2 = tx2_clamp; assign ry2 = ty2_clamp;
-    assign rx3 = tx3_clamp; assign ry3 = ty3_clamp;
-
-    always @* begin
-        collide_bounds = 1'b0;
-        if (tx0_s < 0 || tx0_s > 9 || ty0_s < 0 || ty0_s > 19) collide_bounds = 1'b1;
-        if (tx1_s < 0 || tx1_s > 9 || ty1_s < 0 || ty1_s > 19) collide_bounds = 1'b1;
-        if (tx2_s < 0 || tx2_s > 9 || ty2_s < 0 || ty2_s > 19) collide_bounds = 1'b1;
-        if (tx3_s < 0 || tx3_s > 9 || ty3_s < 0 || ty3_s > 19) collide_bounds = 1'b1;
-    end
-
-    always @* begin
-        dX = 0;
-        dY = 0;
-        next_state = state;
-        want_left = 0;
-        want_right = 0;
-        want_rot = 0;
-        want_grav = 0;
-        dRot = 0;
-        collide = 0;
-        new_rot = rot;
-        next_board_we    = 1'b0;
-        next_board_wdata = 1'b0;
-        next_board_wx    = 4'd0;
-        next_board_wy    = 5'd0;
-
-        case (state)
-            S_IDLE: begin
-                next_state = S_SPAWN;
-            end
-            S_SPAWN: begin
-                next_state = S_CHECK_SPAWN; 
-            end
-            S_CHECK_SPAWN: begin
-                if (collide) next_state = S_GAME_OVER;
-                else next_state = S_FALL;
-            end
-            S_FALL: begin
-                if (left_final) begin
-                    dRot = 0; want_left = 1; dX = -1;
-                end
-                else if (right_final) begin
-                    dRot = 0; want_right = 1; dX = 1;
-                end
-                else if (rot_final) begin
-                    want_rot = 1; dRot = 1;
-                end
-                else if (tick_gravity) begin
-                    want_grav = 1; dY = 1;
-                end
-                new_rot = (rot + dRot) & 2'b11;
-                have_action = (want_left || want_right || want_rot || want_grav);
-                collide = collide_bounds | (r0 | r1 | r2 | r3);
-                if (have_action) begin
-                    if (collide) begin
-                        if (want_grav) next_state = S_LOCK;
-                        else next_state = S_FALL;
-                    end
-                end
-            end
-            S_LOCK: begin
-                next_board_we    = 1'b1;
-                next_board_wdata = 1'b1;
-                case (lock_phase)
-                    2'd0: begin next_board_wx = wx_hold[0]; next_board_wy = wy_hold[0]; end
-                    2'd1: begin next_board_wx = wx_hold[1]; next_board_wy = wy_hold[1]; end
-                    2'd2: begin next_board_wx = wx_hold[2]; next_board_wy = wy_hold[2]; end
-                    2'd3: begin next_board_wx = wx_hold[3]; next_board_wy = wy_hold[3]; end
+            if (ps2_key_pressed) begin
+                case (ps2_key_data)
+                    8'h1C: left_ps2_pulse  <= 1'b1; // 'A'
+                    8'h23: right_ps2_pulse <= 1'b1; // 'D'
+                    8'h1D: rot_ps2_pulse   <= 1'b1; // 'W'
+                    default: ;
                 endcase
-                next_state = (lock_phase == 2'd3) ? S_SPAWN : S_LOCK;
             end
-            S_GAME_OVER: begin
-                 next_state = S_GAME_OVER;
-            end
-            S_CLEAR: begin
-                next_state = S_SPAWN;
-            end
-            default: begin
-                next_state = S_IDLE;
-            end
-        endcase
+        end
     end
 
-    reg move_commit;
-    wire will_move = have_action & ~collide;
-    wire signed [5:0] piece_x_next_s = $signed({1'b0, piece_x}) + $signed({{2{dX_lat[2]}}, dX_lat});
-    wire signed [6:0] piece_y_next_s = $signed({2'b0, piece_y}) + $signed({{3{dY_lat[2]}}, dY_lat});
+    wire left_final, right_final, rot_final;
+    pending_event p_left (
+        .edge_1clk   (left_ps2_pulse),
+        .tick_input  (tick_input),
+        .resetn      (resetn),
+        .clock       (CLOCK_50),
+        .button      (left_final)
+    );
+    pending_event p_right (
+        .edge_1clk   (right_ps2_pulse),
+        .tick_input  (tick_input),
+        .resetn      (resetn),
+        .clock       (CLOCK_50),
+        .button      (right_final)
+    );
+    pending_event p_rot (
+        .edge_1clk   (rot_ps2_pulse),
+        .tick_input  (tick_input),
+        .resetn      (resetn),
+        .clock       (CLOCK_50),
+        .button      (rot_final)
+    );
 
-    // Removed internal rand_cnt, using external input
+    // =========================================================
+    // Core game
+    // =========================================================
+    wire [3:0] cur_x;
+    wire [4:0] cur_y;
+    wire       move_accept;
+    wire [2:0] cur_shape_id; 
+    wire [1:0] cur_rot;      
+    wire signed [3:0] dx0_c, dy0_c, dx1_c, dy1_c, dx2_c, dy2_c, dx3_c, dy3_c; 
+    wire       game_over; 
+
+    wire        board_we;
+    wire [3:0]  board_wx;
+    wire [4:0]  board_wy;
+    wire        board_wdata;
+
+    wire [3:0]  rx0, rx1, rx2, rx3;
+    wire [4:0]  ry0, ry1, ry2, ry3;
+    wire        r0, r1, r2, r3;
+
+    // NEW: Randomizer wire
+    wire [2:0] next_random_shape;
+
+    // NEW: Randomizer Instance
+    // Pass ~resetn because randomiser expects active high reset
+    randomiser u_rand (
+        .reset (~resetn),
+        .clock (CLOCK_50),
+        .shape_id (next_random_shape)
+    );
+
+    // Game core
+    gamelogic GAME(
+        .LEDR       (LEDR),
+        .CLOCK_50   (CLOCK_50),
+        .resetn     (resetn),
+        .left_final (left_final),
+        .right_final(right_final),
+        .rot_final  (rot_final),
+        .tick_gravity(tick_gravity),
+        .r0(r0), .r1(r1), .r2(r2), .r3(r3),
+        .rx0(rx0), .ry0(ry0),
+        .rx1(rx1), .ry1(ry1),
+        .rx2(rx2), .ry2(ry2),
+        .rx3(rx3), .ry3(ry3),
+        .board_we   (board_we),
+        .board_wx   (board_wx),
+        .board_wy   (board_wy),
+        .board_wdata(board_wdata),
+        .score      (score),
+        .cur_x      (cur_x),
+        .cur_y      (cur_y),
+        .move_accept(move_accept),
+        .cur_shape_id (cur_shape_id), 
+        .cur_rot      (cur_rot),      
+        .dx0_c(dx0_c), .dy0_c(dy0_c),
+        .dx1_c(dx1_c), .dy1_c(dy1_c),
+        .dx2_c(dx2_c), .dy2_c(dy2_c),
+        .dx3_c(dx3_c), .dy3_c(dy3_c),
+        .game_over    (game_over),
+        .random_shape (next_random_shape) // Connect the wire
+    );
+
+    // Board instance
+    board10x20_4r BOARD(
+        .clk    (CLOCK_50),
+        .resetn (resetn),
+        .we     (board_we),
+        .wx     (board_wx),
+        .wy     (board_wy),
+        .wdata  (board_wdata),
+        .rx0(rx0), .ry0(ry0), .r0(r0),
+        .rx1(rx1), .ry1(ry1), .r1(r1),
+        .rx2(rx2), .ry2(ry2), .r2(r2),
+        .rx3(rx3), .ry3(ry3), .r3(r3)
+    );
+
+    // =========================================================
+    // Painter and cell→pixel mapping
+    // =========================================================
+    reg        kick;
+    wire       done, busy;
+    reg [9:0]  x0;
+    reg [8:0]  y0;
+    reg [8:0]  paint_color;
+
+    wire [8:0] piece_color = 9'b111_000_111; // magenta
+    wire [8:0] bg_color    = game_over ? 9'b111_000_000 : 9'b000_000_000; 
+
+    // remember last cell (for live piece trail erase)
+    reg [3:0] prev_x;
+    reg [4:0] prev_y;
+    reg       have_prev;
+    reg [1:0] draw_seq;
+    reg [1:0] draw_index; 
+
+    // trigger redraws
+    reg  prev_accept, prev_tick;
+    wire new_accept  = move_accept  & ~prev_accept;
+    wire new_tick    = tick_gravity & ~prev_tick;
+    wire need_redraw = new_accept | new_tick;
+    
+    // clearing disabled at reset
+    reg clearing, first_draw;
+    reg [3:0] clr_x;
+    reg [4:0] clr_y;
+    reg game_over_latched; 
+
+    // ------------------------------
+    // Lock-draw queue to ensure locked blocks are always painted
+    // ------------------------------
+    reg        locking;
+    reg  [1:0] lock_wr_ptr, lock_rd_ptr;
+    reg  [3:0] lock_qx [0:3];
+    reg  [4:0] lock_qy [0:3];
+    wire       lock_q_empty = (lock_wr_ptr == lock_rd_ptr);
+
+    // painter
+    render_box24 RENDER (
+        .CLOCK_50    (CLOCK_50),
+        .resetn      (resetn),
+        .start       (kick),
+        .x0          (x0),
+        .y0          (y0),
+        .color       (paint_color),
+        .done        (done),
+        .busy        (busy),
+        .VGA_R       (VGA_R),
+        .VGA_G       (VGA_G),
+        .VGA_B       (VGA_B),
+        .VGA_HS      (VGA_HS),
+        .VGA_VS      (VGA_VS),
+        .VGA_BLANK_N (VGA_BLANK_N),
+        .VGA_SYNC_N  (VGA_SYNC_N),
+        .VGA_CLK     (VGA_CLK)
+    );
+
+    wire signed [3:0] current_dx, current_dy;
+    assign current_dx = (draw_index == 2'd0) ? dx0_c :
+                        (draw_index == 2'd1) ? dx1_c :
+                        (draw_index == 2'd2) ? dx2_c : dx3_c;
+    assign current_dy = (draw_index == 2'd0) ? dy0_c :
+                        (draw_index == 2'd1) ? dy1_c :
+                        (draw_index == 2'd2) ? dy2_c : dy3_c;
+
+    // ------------------------------
+    // Painter control
+    // ------------------------------
 
     always @(posedge CLOCK_50 or negedge resetn) begin
         if (!resetn) begin
-            dX_lat        <= 3'sd0;
-            dY_lat        <= 3'sd0;
-            want_rot_lat  <= 1'b0;
-            new_rot_lat   <= 2'd0;
-            move_commit   <= 1'b0;
-            lock_phase    <= 2'd0;
-            state         <= S_IDLE;
-            piece_x       <= 4'd0;
-            piece_y       <= 5'd0;
-            rot           <= 2'd0;
-            shape_id      <= 3'd0;
-            board_we      <= 1'b0;
-            board_wdata   <= 1'b0;
-            board_wx      <= 4'd0;
-            board_wy      <= 5'd0;
-            spawn_x       <= 4'd4;
-            spawn_y       <= 5'd0;
-            score         <= 5'd0;
-        end
-        else begin
-            move_commit <= 1'b0;
-            state <= next_state;
-            cur_x <= piece_x;
-            cur_y <= piece_y;
+            prev_accept     <= 1'b0;
+            prev_tick       <= 1'b0;
+            locking         <= 1'b0;
+            lock_wr_ptr     <= 2'd0;
+            lock_rd_ptr     <= 2'd0;
+            have_prev       <= 1'b0;
+            draw_seq        <= 2'd0;
+            draw_index      <= 2'd0; 
+            kick            <= 1'b0;
+            x0              <= 10'd0;
+            y0              <= 9'd0;
+            paint_color     <= 9'd0;
+            prev_x          <= 4'd0;
+            prev_y          <= 5'd0;
+            clearing        <= 1'b0;
+            first_draw      <= 1'b1;  
+            clr_x           <= 4'd0;
+            clr_y           <= 5'd0;
+            game_over_latched <= 1'b0;
+        end else begin
+            prev_accept   <= move_accept;
+            prev_tick     <= tick_gravity;
 
-            if (state == S_FALL && will_move) begin
-                move_commit   <= 1'b1;
-                dX_lat        <= dX;
-                dY_lat        <= dY;
-                want_rot_lat  <= want_rot;
-                new_rot_lat   <= new_rot;
+            kick <= 1'b0; 
+
+            if (game_over && !game_over_latched) begin
+                clearing          <= 1'b1;
+                game_over_latched <= 1'b1;
+                clr_x             <= 4'd0;
+                clr_y             <= 5'd0;
             end
 
-            if (move_commit) begin
-                piece_x <= piece_x_next_s[3:0];
-                piece_y <= piece_y_next_s[4:0];
-                if (want_rot_lat) rot <= new_rot_lat;
+            if (board_we && board_wdata) begin
+                lock_qx[lock_wr_ptr] <= board_wx;
+                lock_qy[lock_wr_ptr] <= board_wy;
+                lock_wr_ptr          <= lock_wr_ptr + 2'd1;
+                locking              <= 1'b1;
             end
 
-            if (state == S_SPAWN) begin
-                shape_id <= random_shape; // FIX: Use external random shape
-                rot      <= 2'd0;
-                piece_x  <= spawn_x;
-                piece_y  <= spawn_y;
-            end
-
-            if (state == S_FALL && next_state == S_LOCK) begin
-                wx_hold[0] <= piece_x + dx0_c;
-                wy_hold[0] <= piece_y + dy0_c;
-                wx_hold[1] <= piece_x + dx1_c;  wy_hold[1] <= piece_y + dy1_c;
-                wx_hold[2] <= piece_x + dx2_c;
-                wy_hold[2] <= piece_y + dy2_c;
-                wx_hold[3] <= piece_x + dx3_c;  wy_hold[3] <= piece_y + dy3_c;
-                lock_phase <= 2'd0;
-            end
-
-            board_we    <= next_board_we;
-            board_wdata <= next_board_wdata;
-            board_wx    <= next_board_wx;
-            board_wy    <= next_board_wy;
-
-            if (state == S_LOCK) begin
-                if (lock_phase == 2'd3) begin
-                    lock_phase <= 2'd0;
-                    if (score != 5'd31) score <= score + 5'd1;
+            if (clearing) begin
+                if (~busy && ~kick) begin
+                    x0          <= {clr_x, 6'b0};
+                    y0          <= {clr_y, 4'b0} + {clr_y, 3'b0};
+                    paint_color <= bg_color;
+                    kick        <= 1'b1;
+                end else if (done) begin
+                    if (clr_x == 4'd9) begin
+                        clr_x <= 4'd0;
+                        if (clr_y == 5'd19) begin
+                            clr_y     <= 5'd0;
+                            clearing  <= 1'b0;
+                            first_draw<= 1'b1;
+                            prev_x    <= cur_x;
+                            prev_y    <= cur_y;
+                        end else begin
+                            clr_y <= clr_y + 5'd1;
+                        end
+                    end else begin
+                        clr_x <= clr_x + 4'd1;
+                    end
                 end
-                else begin
-                    lock_phase <= lock_phase + 2'd1;
+            end else if (!game_over) begin
+                if (~busy && ~kick && ~lock_q_empty) begin
+                    x0          <= {lock_qx[lock_rd_ptr], 6'b0};
+                    y0          <= {lock_qy[lock_rd_ptr], 4'b0} + {lock_qy[lock_rd_ptr], 3'b0};
+                    paint_color <= piece_color; 
+                    kick        <= 1'b1;
+                    lock_rd_ptr <= lock_rd_ptr + 2'd1;
+                end
+                else if (locking && lock_q_empty && done && ~busy && ~kick) begin
+                    locking    <= 1'b0;
+                    have_prev  <= 1'b0; 
+                    first_draw <= 1'b1; 
+                    prev_x     <= cur_x;
+                    prev_y     <= cur_y;
+                end else if (first_draw && ~busy && ~kick) begin
+                    x0          <= {prev_x + dx0_c, 6'b0}; 
+                    y0          <= {prev_y + dy0_c, 4'b0} + {prev_y + dy0_c, 3'b0};
+                    paint_color <= bg_color;
+                    kick        <= 1'b1;
+                    first_draw  <= 1'b0;
+                    draw_seq    <= 2'd1; 
+                    draw_index  <= 2'd0; 
+                end else begin
+                    case (draw_seq)
+                        2'd0: begin 
+                            if (need_redraw && ~busy && ~kick) begin
+                                if (~locking && have_prev && lock_q_empty) begin
+                                    x0          <= {prev_x + dx0_c, 6'b0};
+                                    y0          <= {prev_y + dy0_c, 4'b0} + {prev_y + dy0_c, 3'b0};
+                                    paint_color <= bg_color;
+                                    kick        <= 1'b1;
+                                    draw_seq    <= 2'd1; 
+                                    draw_index  <= 2'd0;
+                                end else begin
+                                    x0          <= {cur_x + dx0_c, 6'b0};
+                                    y0          <= {cur_y + dy0_c, 4'b0} + {cur_y + dy0_c, 3'b0};
+                                    paint_color <= piece_color;
+                                    kick        <= 1'b1;
+                                    draw_seq    <= 2'd2; 
+                                    draw_index  <= 2'd0;
+                                end
+                            end
+                        end
+                        2'd1: begin 
+                            if (done && ~busy && ~kick) begin
+                                if (draw_index == 2'd3) begin
+                                    x0          <= {cur_x + dx0_c, 6'b0};
+                                    y0          <= {cur_y + dy0_c, 4'b0} + {cur_y + dy0_c, 3'b0};
+                                    paint_color <= piece_color;
+                                    kick        <= 1'b1;
+                                    draw_seq    <= 2'd2; 
+                                    draw_index  <= 2'd0;
+                                end else begin
+                                    case (draw_index)
+                                        2'd0: begin x0 <= {prev_x + dx1_c, 6'b0}; y0 <= {prev_y + dy1_c, 4'b0} + {prev_y + dy1_c, 3'b0}; end
+                                        2'd1: begin x0 <= {prev_x + dx2_c, 6'b0}; y0 <= {prev_y + dy2_c, 4'b0} + {prev_y + dy2_c, 3'b0}; end
+                                        2'd2: begin x0 <= {prev_x + dx3_c, 6'b0}; y0 <= {prev_y + dy3_c, 4'b0} + {prev_y + dy3_c, 3'b0}; end
+                                        default: ;
+                                    endcase
+                                    paint_color <= bg_color;
+                                    kick        <= 1'b1;
+                                    draw_index  <= draw_index + 2'd1;
+                                end
+                            end
+                        end
+                        2'd2: begin 
+                            if (done && ~busy && ~kick) begin
+                                if (draw_index == 2'd3) begin
+                                    draw_seq    <= 2'd3; 
+                                    draw_index  <= 2'd0;
+                                end else begin
+                                    case (draw_index)
+                                        2'd0: begin x0 <= {cur_x + dx1_c, 6'b0}; y0 <= {cur_y + dy1_c, 4'b0} + {cur_y + dy1_c, 3'b0}; end
+                                        2'd1: begin x0 <= {cur_x + dx2_c, 6'b0}; y0 <= {cur_y + dy2_c, 4'b0} + {cur_y + dy2_c, 3'b0}; end
+                                        2'd2: begin x0 <= {cur_x + dx3_c, 6'b0}; y0 <= {cur_y + dy3_c, 4'b0} + {cur_y + dy3_c, 3'b0}; end
+                                        default: ;
+                                    endcase
+                                    paint_color <= piece_color;
+                                    kick        <= 1'b1;
+                                    draw_index  <= draw_index + 2'd1;
+                                end
+                            end
+                        end
+                        2'd3: begin 
+                             prev_x      <= cur_x;
+                             prev_y      <= cur_y;
+                             have_prev   <= 1'b1;
+                             draw_seq    <= 2'd0;
+                             draw_index  <= 2'd0;
+                        end
+                        default: draw_seq <= 2'd0;
+                    endcase
                 end
             end
         end
     end
 
-    assign move_accept = move_commit;
-    assign LEDR[7:5] = state;
-    assign LEDR[0]   = move_accept;
-    assign LEDR[1]   = have_action & collide;
-    assign LEDR[2]   = tick_gravity;
+    wire [6:0] h_tens, h_units;
+    SevSegDecoder_5bit s(score, h_tens, h_units);
+    assign HEX0 = ~h_units;
+    assign HEX1 = ~h_tens;
+
 endmodule
