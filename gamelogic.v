@@ -1,61 +1,56 @@
-// board size: 10 cols (0 <= x <= 9) * 20 rows (0 <= y <= 19)
-// origin: top-left cell (ORIGIN_X = 0, ORIGIN_Y = 0)
-// y increases downward: gravity = y + 1
-// screen 640 x 480 (0 <= px_x <= 639, 0 <= px_y <= 479)
-// CELL_W = 640 / 10 = 64 px
-// CELL_H = 480 / 20 = 24 px
-// px_left = ORIGIN_X + x * CELL_W
-// px_top = ORIGIN_Y + y * CELL_H
-// ORIGIN (x = 0, y = 0) maps to pixels [0:63]x[0:23]
-// BOTTOM RIGHT (x = 9, y = 19) maps to 
-// pixels [576:639]x[456:479]
-// proposed moves: (dX, dY, dRot)
-// left (-1,0,0) ; right (+1,0,0); rotate(0,0, 1 mod 4);
-// gravity (0, +1, 0)
-// need a lookup table for the shapes: offsets[shape_id][rot][0:3] = (dx, dy)
-// for each shape, have 4 diff rotations (1 at 0 deg (default), at 90, at 180, then back to 0 (hence the mod 4))
-// CLOCKWISE ROTATION
-// for rotation: 1 mod 4 means we go to the next rotation state, then wrap around at 4 (4 rotation states)
-// before making a move: (for 0 <= i <= 3)
-// 1 - compute target cell: 
-// new_rot = (rot + dRot) mod 4
-// (dx[i], dy[i]) = offsets[shape_id][new_rot][i]
-// tx[i] = piece_x + dX + dx[i]
-// ty[i] = piece_y + 
-// dY + dy[i]
-// 2 - bounds check
-// if tx < 0 | tx > 63 |
-// ty > 23 => collide = 1 (illegal)
-// if read_cell(tx, ty) == 1, collide == 1
-// 3 - if all conditions keep collide = 0 , accept the move:
-// piece_x += dX, piece_y += dY, rot = new_rot
+// Module: gamelogic
+// Purpose: The "Brain" of the Tetris game. 
+//          - Handles State Machine (Idle, Spawn, Fall, Lock, Game Over).
+//          - Calculates collisions based on board memory and boundaries.
+//          - Updates piece coordinates based on inputs and gravity.
 
 module gamelogic(
+    // System Inputs
     LEDR, CLOCK_50, resetn,
+    
+    // User Inputs (Debounced pulses)
     left_final, right_final, rot_final,
+    
+    // Timing Inputs
     tick_gravity,
+
+    // Board Read Ports (Combinational inputs from board memory)
     r0, r1, r2, r3,
+    
+    // Board Read Addresses (Outputs to board memory)
     rx0, ry0, rx1, ry1, rx2, ry2, rx3, ry3,
+    
+    // Board Write Ports (To lock pieces)
     board_we, board_wx, board_wy, board_wdata,
+    
+    // Game State Outputs
     score, cur_x, cur_y, move_accept,
-     cur_shape_id,
-     cur_rot,
+    
+    // Piece Info Outputs (To Painter)
+    cur_shape_id, cur_rot,
+    
+    // Current Piece Offsets (To Painter)
     dx0_c, dy0_c, dx1_c, dy1_c, dx2_c, dy2_c, dx3_c, dy3_c,
-     game_over,
-     random_shape // NEW INPUT
+    
+    // Game Status
+    game_over,
+    
+    // Randomness Source
+    random_shape
 );
+    // --- I/O Declarations ---
     output wire [2:0] cur_shape_id;
     output wire [1:0] cur_rot;
+    // Current piece offsets (calculated by instance OFF_CUR)
     output wire signed [3:0] dx0_c, dy0_c, dx1_c, dy1_c, dx2_c, dy2_c, dx3_c, dy3_c;
     output wire game_over;
-    input wire [2:0] random_shape; // Input from the randomiser module
+    input wire [2:0] random_shape;
 
     input  CLOCK_50, resetn;
     output [9:0] LEDR;
     input  left_final, right_final, rot_final;
     input  tick_gravity;
 
-    // gamelogic port deltas
     input  r0, r1, r2, r3;
     output [3:0] rx0, rx1, rx2, rx3;
     output [4:0] ry0, ry1, ry2, ry3;
@@ -64,6 +59,7 @@ module gamelogic(
     output reg [4:0] board_wy;
     output reg       board_wdata;
 
+    // Internal next-state signals for board writing
     reg       next_board_we;
     reg [3:0] next_board_wx;
     reg [4:0] next_board_wy;
@@ -71,12 +67,21 @@ module gamelogic(
 
     output reg [4:0] score;
     
-    // FSM states
-    parameter S_IDLE = 3'd0, S_SPAWN = 3'd1, S_FALL = 3'd2, S_LOCK = 3'd3, S_CLEAR = 3'd4, S_GAME_OVER = 3'd5, S_CHECK_SPAWN = 3'd6; 
+    // --- State Machine Definition ---
+    // S_CHECK_SPAWN (6) is critical to prevent race conditions during Game Over detection.
+    parameter S_IDLE        = 3'd0;
+    parameter S_SPAWN       = 3'd1;
+    parameter S_FALL        = 3'd2;
+    parameter S_LOCK        = 3'd3;
+    parameter S_CLEAR       = 3'd4;
+    parameter S_GAME_OVER   = 3'd5;
+    parameter S_CHECK_SPAWN = 3'd6; 
+    
     reg [2:0] state, next_state;
     
     assign game_over = (state == S_GAME_OVER);
 
+    // --- Piece State Registers ---
     reg [1:0] rot;
     reg [2:0] shape_id;
     assign cur_shape_id = shape_id;
@@ -87,7 +92,8 @@ module gamelogic(
     reg [3:0] piece_x;
     reg [4:0] piece_y;
 
-    reg  signed [2:0] dX_lat, dY_lat;
+    // --- Movement Logic ---
+    reg  signed [2:0] dX_lat, dY_lat; // Latched deltas to apply on next clock
     reg               want_rot_lat;
     reg        [1:0]  new_rot_lat;
     output            move_accept;
@@ -103,9 +109,11 @@ module gamelogic(
     output reg [3:0] cur_x;
     output reg [4:0] cur_y;
     
-    // Offsets
+    // --- Offset Calculation ---
+    // dx*_t are the offsets for the TRIAL move (to check collisions)
     wire signed [3:0] dx0_t, dy0_t, dx1_t, dy1_t, dx2_t, dy2_t, dx3_t, dy3_t;
     
+    // Calculates offsets for the CURRENT position (for drawing/locking)
     tetris_piece_offsets OFF_CUR (
         .shape_id (shape_id),
         .rot      (rot),  
@@ -115,6 +123,7 @@ module gamelogic(
         .dx3(dx3_c), .dy3(dy3_c)
     );
 
+    // Calculates offsets for the PROPOSED position (for collision checking)
     tetris_piece_offsets OFF_TRY (
         .shape_id (shape_id),
         .rot      (new_rot),  
@@ -124,10 +133,12 @@ module gamelogic(
         .dx3(dx3_t), .dy3(dy3_t)
     );
 
+    // --- Locking Queue Registers ---
     reg [1:0] lock_phase;
-    reg [3:0] wx_hold [0:3];
-    reg [4:0] wy_hold [0:3];
+    reg [3:0] wx_hold [0:3]; // Holds X coords of the 4 blocks to lock
+    reg [4:0] wy_hold [0:3]; // Holds Y coords of the 4 blocks to lock
 
+    // --- Collision Logic ---
     reg collide_bounds;
     wire signed [5:0] piece_x_s = $signed({1'b0, piece_x}); 
     wire signed [6:0] piece_y_s = $signed({2'b00, piece_y});
@@ -135,6 +146,7 @@ module gamelogic(
     wire signed [5:0] dX_s = $signed({{3{dX[2]}}, dX});
     wire signed [6:0] dY_s = $signed({{4{dY[2]}}, dY});
 
+    // Calculate target coordinates for all 4 blocks
     wire signed [5:0] tx0_s = piece_x_s + dX_s + $signed({{2{dx0_t[3]}}, dx0_t});
     wire signed [5:0] tx1_s = piece_x_s + dX_s + $signed({{2{dx1_t[3]}}, dx1_t});
     wire signed [5:0] tx2_s = piece_x_s + dX_s + $signed({{2{dx2_t[3]}}, dx2_t});
@@ -144,6 +156,7 @@ module gamelogic(
     wire signed [6:0] ty2_s = piece_y_s + dY_s + $signed({{3{dy2_t[3]}}, dy2_t});
     wire signed [6:0] ty3_s = piece_y_s + dY_s + $signed({{3{dy3_t[3]}}, dy3_t});
 
+    // Clamp read addresses to prevent out-of-bounds memory access
     wire [3:0] tx0_clamp = (tx0_s < 0) ? 4'd0 : (tx0_s > 9) ? 4'd9 : tx0_s[3:0];
     wire [3:0] tx1_clamp = (tx1_s < 0) ? 4'd0 : (tx1_s > 9) ? 4'd9 : tx1_s[3:0];
     wire [3:0] tx2_clamp = (tx2_s < 0) ? 4'd0 : (tx2_s > 9) ? 4'd9 : tx2_s[3:0];
@@ -159,6 +172,7 @@ module gamelogic(
     assign rx2 = tx2_clamp; assign ry2 = ty2_clamp;
     assign rx3 = tx3_clamp; assign ry3 = ty3_clamp;
 
+    // Combinational Boundary Check
     always @* begin
         collide_bounds = 1'b0;
         if (tx0_s < 0 || tx0_s > 9 || ty0_s < 0 || ty0_s > 19) collide_bounds = 1'b1;
@@ -167,6 +181,7 @@ module gamelogic(
         if (tx3_s < 0 || tx3_s > 9 || ty3_s < 0 || ty3_s > 19) collide_bounds = 1'b1;
     end
 
+    // --- FSM Logic (Combinational Next State) ---
     always @* begin
         dX = 0;
         dY = 0;
@@ -188,13 +203,17 @@ module gamelogic(
                 next_state = S_SPAWN;
             end
             S_SPAWN: begin
+                // Move to Check Spawn to allow memory reads to settle.
+                // Checking collision immediately here causes race conditions.
                 next_state = S_CHECK_SPAWN; 
             end
             S_CHECK_SPAWN: begin
+                // Now coordinates are stable, check if the new piece overlaps existing blocks.
                 if (collide) next_state = S_GAME_OVER;
                 else next_state = S_FALL;
             end
             S_FALL: begin
+                // Prioritize inputs: Left/Right > Rotate > Gravity
                 if (left_final) begin
                     dRot = 0; want_left = 1; dX = -1;
                 end
@@ -209,15 +228,19 @@ module gamelogic(
                 end
                 new_rot = (rot + dRot) & 2'b11;
                 have_action = (want_left || want_right || want_rot || want_grav);
+                
+                // Total collision = Boundary violation OR Board memory read returns 1
                 collide = collide_bounds | (r0 | r1 | r2 | r3);
+                
                 if (have_action) begin
                     if (collide) begin
-                        if (want_grav) next_state = S_LOCK;
-                        else next_state = S_FALL;
+                        if (want_grav) next_state = S_LOCK; // Hit bottom/piece -> Lock
+                        else next_state = S_FALL; // Hit wall -> Ignore move
                     end
                 end
             end
             S_LOCK: begin
+                // Write one block per clock cycle to the board memory
                 next_board_we    = 1'b1;
                 next_board_wdata = 1'b1;
                 case (lock_phase)
@@ -229,7 +252,7 @@ module gamelogic(
                 next_state = (lock_phase == 2'd3) ? S_SPAWN : S_LOCK;
             end
             S_GAME_OVER: begin
-                 next_state = S_GAME_OVER;
+                 next_state = S_GAME_OVER; // Infinite loop (requires reset)
             end
             S_CLEAR: begin
                 next_state = S_SPAWN;
@@ -240,12 +263,11 @@ module gamelogic(
         endcase
     end
 
+    // --- Sequential Logic ---
     reg move_commit;
     wire will_move = have_action & ~collide;
     wire signed [5:0] piece_x_next_s = $signed({1'b0, piece_x}) + $signed({{2{dX_lat[2]}}, dX_lat});
     wire signed [6:0] piece_y_next_s = $signed({2'b0, piece_y}) + $signed({{3{dY_lat[2]}}, dY_lat});
-
-    // Removed internal rand_cnt, using external input
 
     always @(posedge CLOCK_50 or negedge resetn) begin
         if (!resetn) begin
@@ -274,6 +296,7 @@ module gamelogic(
             cur_x <= piece_x;
             cur_y <= piece_y;
 
+            // 1. Latch Move Request
             if (state == S_FALL && will_move) begin
                 move_commit   <= 1'b1;
                 dX_lat        <= dX;
@@ -282,19 +305,22 @@ module gamelogic(
                 new_rot_lat   <= new_rot;
             end
 
+            // 2. Execute Move (Update Coordinates)
             if (move_commit) begin
                 piece_x <= piece_x_next_s[3:0];
                 piece_y <= piece_y_next_s[4:0];
                 if (want_rot_lat) rot <= new_rot_lat;
             end
 
+            // 3. Spawn Logic
             if (state == S_SPAWN) begin
-                shape_id <= random_shape; // FIX: Use external random shape
+                shape_id <= random_shape; // Capture random shape from input
                 rot      <= 2'd0;
                 piece_x  <= spawn_x;
                 piece_y  <= spawn_y;
             end
 
+            // 4. Prepare for Locking (Capture final coordinates)
             if (state == S_FALL && next_state == S_LOCK) begin
                 wx_hold[0] <= piece_x + dx0_c;
                 wy_hold[0] <= piece_y + dy0_c;
@@ -305,14 +331,17 @@ module gamelogic(
                 lock_phase <= 2'd0;
             end
 
+            // 5. Update Board Memory Signals
             board_we    <= next_board_we;
             board_wdata <= next_board_wdata;
             board_wx    <= next_board_wx;
             board_wy    <= next_board_wy;
 
+            // 6. Locking Sequence & Score
             if (state == S_LOCK) begin
                 if (lock_phase == 2'd3) begin
                     lock_phase <= 2'd0;
+                    // Increment score up to max 31
                     if (score != 5'd31) score <= score + 5'd1;
                 end
                 else begin
