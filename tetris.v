@@ -1,5 +1,8 @@
 `default_nettype none
 
+// Top-level: PS/2 keys -> clean pulses -> gamelogic -> painter.
+// Integrates all sub-modules: Input, Game Logic, Board Memory, and VGA Rendering.
+
 module tetris(
     SW, KEY, CLOCK_50, LEDR, HEX0, HEX1, PS2_CLK, PS2_DAT,
     VGA_R, VGA_G, VGA_B, VGA_HS, VGA_VS, VGA_BLANK_N, VGA_SYNC_N, VGA_CLK
@@ -17,17 +20,20 @@ module tetris(
     wire resetn = KEY[3];
     
     // =========================================================
-    // Ticks
+    // Ticks & Timing
     // =========================================================
     wire [4:0] score;
     wire       tick_input, tick_gravity;
 
+    // Input polling tick (controls auto-repeat speed if implemented)
     tick_i in (
         .CLOCK_50   (CLOCK_50),
         .resetn     (resetn),
         .tick_input (tick_input)
     );
-    wire blink_unused;
+    
+    // Gravity tick (controls falling speed based on score)
+    wire blink_unused; // Unused blink output
     tick_g gravity (
         .CLOCK_50     (CLOCK_50),
         .resetn       (resetn),
@@ -43,6 +49,7 @@ module tetris(
     input  wire PS2_DAT;
     wire  [7:0] ps2_key_data;
     wire        ps2_key_pressed;
+    
     PS2_Interface PS2 (
         .CLOCK_50        (CLOCK_50),
         .resetn          (resetn),
@@ -52,6 +59,7 @@ module tetris(
         .scan_code_valid (ps2_key_pressed)
     );
     
+    // Decode PS/2 make codes into 1-cycle pulses for Game Logic
     reg left_ps2_pulse, right_ps2_pulse, rot_ps2_pulse;
     always @(posedge CLOCK_50 or negedge resetn) begin
         if (!resetn) begin
@@ -65,15 +73,16 @@ module tetris(
 
             if (ps2_key_pressed) begin
                 case (ps2_key_data)
-                    8'h1C: left_ps2_pulse  <= 1'b1; // 'A'
-                    8'h23: right_ps2_pulse <= 1'b1; // 'D'
-                    8'h1D: rot_ps2_pulse   <= 1'b1; // 'W'
+                    8'h1C: left_ps2_pulse  <= 1'b1; // 'A' = Left
+                    8'h23: right_ps2_pulse <= 1'b1; // 'D' = Right
+                    8'h1D: rot_ps2_pulse   <= 1'b1; // 'W' = Rotate
                     default: ;
                 endcase
             end
         end
     end
 
+    // Rate limit inputs to prevent "flying" pieces
     wire left_final, right_final, rot_final;
     pending_event p_left (
         .edge_1clk   (left_ps2_pulse),
@@ -98,7 +107,7 @@ module tetris(
     );
 
     // =========================================================
-    // Core game
+    // Core Game Instantiation
     // =========================================================
     wire [3:0] cur_x;
     wire [4:0] cur_y;
@@ -117,18 +126,14 @@ module tetris(
     wire [4:0]  ry0, ry1, ry2, ry3;
     wire        r0, r1, r2, r3;
 
-    // NEW: Randomizer wire
+    // Randomizer for Shape Selection
     wire [2:0] next_random_shape;
-
-    // NEW: Randomizer Instance
-    // Pass ~resetn because randomiser expects active high reset
     randomiser u_rand (
-        .reset (~resetn),
+        .reset (~resetn), // Active High Reset for this module
         .clock (CLOCK_50),
         .shape_id (next_random_shape)
     );
 
-    // Game core
     gamelogic GAME(
         .LEDR       (LEDR),
         .CLOCK_50   (CLOCK_50),
@@ -137,6 +142,7 @@ module tetris(
         .right_final(right_final),
         .rot_final  (rot_final),
         .tick_gravity(tick_gravity),
+        // Board Interface
         .r0(r0), .r1(r1), .r2(r2), .r3(r3),
         .rx0(rx0), .ry0(ry0),
         .rx1(rx1), .ry1(ry1),
@@ -146,6 +152,7 @@ module tetris(
         .board_wx   (board_wx),
         .board_wy   (board_wy),
         .board_wdata(board_wdata),
+        // Outputs
         .score      (score),
         .cur_x      (cur_x),
         .cur_y      (cur_y),
@@ -157,10 +164,10 @@ module tetris(
         .dx2_c(dx2_c), .dy2_c(dy2_c),
         .dx3_c(dx3_c), .dy3_c(dy3_c),
         .game_over    (game_over),
-        .random_shape (next_random_shape) // Connect the wire
+        .random_shape (next_random_shape)
     );
 
-    // Board instance
+    // Board Memory (Stores the locked grid)
     board10x20_4r BOARD(
         .clk    (CLOCK_50),
         .resetn (resetn),
@@ -183,38 +190,36 @@ module tetris(
     reg [8:0]  y0;
     reg [8:0]  paint_color;
 
-    wire [8:0] piece_color = 9'b111_000_111; // magenta
+    wire [8:0] piece_color = 9'b111_000_111; // Magenta
+    // BG Color logic: Black during play, Red during Game Over
     wire [8:0] bg_color    = game_over ? 9'b111_000_000 : 9'b000_000_000; 
 
-    // remember last cell (for live piece trail erase)
+    // State registers for the drawing FSM
     reg [3:0] prev_x;
     reg [4:0] prev_y;
     reg       have_prev;
     reg [1:0] draw_seq;
-    reg [1:0] draw_index; 
+    reg [1:0] draw_index; // Iterates 0-3 to draw all 4 blocks
 
-    // trigger redraws
+    // Signals to trigger redraws
     reg  prev_accept, prev_tick;
     wire new_accept  = move_accept  & ~prev_accept;
     wire new_tick    = tick_gravity & ~prev_tick;
     wire need_redraw = new_accept | new_tick;
     
-    // clearing disabled at reset
     reg clearing, first_draw;
     reg [3:0] clr_x;
     reg [4:0] clr_y;
     reg game_over_latched; 
 
-    // ------------------------------
-    // Lock-draw queue to ensure locked blocks are always painted
-    // ------------------------------
+    // Locking Queue (Buffers writes to ensure they are painted)
     reg        locking;
     reg  [1:0] lock_wr_ptr, lock_rd_ptr;
     reg  [3:0] lock_qx [0:3];
     reg  [4:0] lock_qy [0:3];
     wire       lock_q_empty = (lock_wr_ptr == lock_rd_ptr);
 
-    // painter
+    // VGA Renderer (Draws 24x24 boxes)
     render_box24 RENDER (
         .CLOCK_50    (CLOCK_50),
         .resetn      (resetn),
@@ -234,6 +239,7 @@ module tetris(
         .VGA_CLK     (VGA_CLK)
     );
 
+    // Mux to select the correct offset for the current drawing step
     wire signed [3:0] current_dx, current_dy;
     assign current_dx = (draw_index == 2'd0) ? dx0_c :
                         (draw_index == 2'd1) ? dx1_c :
@@ -243,11 +249,11 @@ module tetris(
                         (draw_index == 2'd2) ? dy2_c : dy3_c;
 
     // ------------------------------
-    // Painter control
+    // Painter Control Logic
     // ------------------------------
-
     always @(posedge CLOCK_50 or negedge resetn) begin
         if (!resetn) begin
+            // Reset all state
             prev_accept     <= 1'b0;
             prev_tick       <= 1'b0;
             locking         <= 1'b0;
@@ -271,8 +277,9 @@ module tetris(
             prev_accept   <= move_accept;
             prev_tick     <= tick_gravity;
 
-            kick <= 1'b0; 
+            kick <= 1'b0; // Pulse kick low by default
 
+            // Trigger "Red Screen" clear once upon Game Over
             if (game_over && !game_over_latched) begin
                 clearing          <= 1'b1;
                 game_over_latched <= 1'b1;
@@ -280,6 +287,7 @@ module tetris(
                 clr_y             <= 5'd0;
             end
 
+            // Capture locked cells into the draw queue
             if (board_we && board_wdata) begin
                 lock_qx[lock_wr_ptr] <= board_wx;
                 lock_qy[lock_wr_ptr] <= board_wy;
@@ -287,6 +295,7 @@ module tetris(
                 locking              <= 1'b1;
             end
 
+            // Priority 1: Screen Clearing (Reset or Game Over)
             if (clearing) begin
                 if (~busy && ~kick) begin
                     x0          <= {clr_x, 6'b0};
@@ -309,7 +318,9 @@ module tetris(
                         clr_x <= clr_x + 4'd1;
                     end
                 end
+            // Priority 2: Normal Game Drawing
             end else if (!game_over) begin
+                // 2a. Draw Locked Cells (Static)
                 if (~busy && ~kick && ~lock_q_empty) begin
                     x0          <= {lock_qx[lock_rd_ptr], 6'b0};
                     y0          <= {lock_qy[lock_rd_ptr], 4'b0} + {lock_qy[lock_rd_ptr], 3'b0};
@@ -317,12 +328,14 @@ module tetris(
                     kick        <= 1'b1;
                     lock_rd_ptr <= lock_rd_ptr + 2'd1;
                 end
+                // 2b. Sync Live Piece State after Locking
                 else if (locking && lock_q_empty && done && ~busy && ~kick) begin
                     locking    <= 1'b0;
                     have_prev  <= 1'b0; 
                     first_draw <= 1'b1; 
                     prev_x     <= cur_x;
                     prev_y     <= cur_y;
+                // 2c. First Draw of New Piece
                 end else if (first_draw && ~busy && ~kick) begin
                     x0          <= {prev_x + dx0_c, 6'b0}; 
                     y0          <= {prev_y + dy0_c, 4'b0} + {prev_y + dy0_c, 3'b0};
@@ -331,11 +344,13 @@ module tetris(
                     first_draw  <= 1'b0;
                     draw_seq    <= 2'd1; 
                     draw_index  <= 2'd0; 
+                // 2d. Live Piece Movement FSM (Erase -> Draw)
                 end else begin
                     case (draw_seq)
-                        2'd0: begin 
+                        2'd0: begin // Check for Redraw Need
                             if (need_redraw && ~busy && ~kick) begin
                                 if (~locking && have_prev && lock_q_empty) begin
+                                    // Erase old position
                                     x0          <= {prev_x + dx0_c, 6'b0};
                                     y0          <= {prev_y + dy0_c, 4'b0} + {prev_y + dy0_c, 3'b0};
                                     paint_color <= bg_color;
@@ -343,6 +358,7 @@ module tetris(
                                     draw_seq    <= 2'd1; 
                                     draw_index  <= 2'd0;
                                 end else begin
+                                    // Draw new position directly (no erase possible/needed)
                                     x0          <= {cur_x + dx0_c, 6'b0};
                                     y0          <= {cur_y + dy0_c, 4'b0} + {cur_y + dy0_c, 3'b0};
                                     paint_color <= piece_color;
@@ -352,9 +368,10 @@ module tetris(
                                 end
                             end
                         end
-                        2'd1: begin 
+                        2'd1: begin // Iterate through 4 blocks to ERASE
                             if (done && ~busy && ~kick) begin
                                 if (draw_index == 2'd3) begin
+                                    // Erase done, start drawing
                                     x0          <= {cur_x + dx0_c, 6'b0};
                                     y0          <= {cur_y + dy0_c, 4'b0} + {cur_y + dy0_c, 3'b0};
                                     paint_color <= piece_color;
@@ -362,6 +379,7 @@ module tetris(
                                     draw_seq    <= 2'd2; 
                                     draw_index  <= 2'd0;
                                 end else begin
+                                    // Setup next block erase
                                     case (draw_index)
                                         2'd0: begin x0 <= {prev_x + dx1_c, 6'b0}; y0 <= {prev_y + dy1_c, 4'b0} + {prev_y + dy1_c, 3'b0}; end
                                         2'd1: begin x0 <= {prev_x + dx2_c, 6'b0}; y0 <= {prev_y + dy2_c, 4'b0} + {prev_y + dy2_c, 3'b0}; end
@@ -374,12 +392,13 @@ module tetris(
                                 end
                             end
                         end
-                        2'd2: begin 
+                        2'd2: begin // Iterate through 4 blocks to DRAW
                             if (done && ~busy && ~kick) begin
                                 if (draw_index == 2'd3) begin
                                     draw_seq    <= 2'd3; 
                                     draw_index  <= 2'd0;
                                 end else begin
+                                    // Setup next block draw
                                     case (draw_index)
                                         2'd0: begin x0 <= {cur_x + dx1_c, 6'b0}; y0 <= {cur_y + dy1_c, 4'b0} + {cur_y + dy1_c, 3'b0}; end
                                         2'd1: begin x0 <= {cur_x + dx2_c, 6'b0}; y0 <= {cur_y + dy2_c, 4'b0} + {cur_y + dy2_c, 3'b0}; end
@@ -392,7 +411,7 @@ module tetris(
                                 end
                             end
                         end
-                        2'd3: begin 
+                        2'd3: begin // Finalize Frame
                              prev_x      <= cur_x;
                              prev_y      <= cur_y;
                              have_prev   <= 1'b1;
@@ -406,6 +425,7 @@ module tetris(
         end
     end
 
+    // HEX Display Logic
     wire [6:0] h_tens, h_units;
     SevSegDecoder_5bit s(score, h_tens, h_units);
     assign HEX0 = ~h_units;
