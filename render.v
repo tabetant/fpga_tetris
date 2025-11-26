@@ -126,7 +126,7 @@ module render_box24 (
     defparam VGA.RESOLUTION       = "640x480";
     defparam VGA.COLOR_DEPTH      = 9;
     // Adjust or override this in your top if you want:
-//    defparam VGA.BACKGROUND_IMAGE = "./framefinal.mif";
+    defparam VGA.BACKGROUND_IMAGE = "./framefinal.mif";
 
 endmodule
 
