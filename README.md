@@ -33,28 +33,45 @@ flowchart LR
     RNG[Randomiser] --> FSM
     FSM --> PAINT["render / painter"]
     MEM --> PAINT
-    PAINT --> VGA[vga_adapter]
+    PAINT --> VGA["vga_adapter (provided)"]
     VGA --> MON[VGA monitor]
     FSM --> HEX[7-seg score]
 ```
 
 The `gamelogic` module is the core FSM. It reads four cells per cycle from board memory (one for each block of the active tetromino), checks collision against boundaries, and writes the piece into board memory only on the Lock transition. The painter reads the locked board plus the active piece's offsets and rasterizes to the VGA framebuffer through the standard `vga_adapter`.
 
-## 🛠 Modules
+## 📁 Repo layout
 
-| File | Role |
-|---|---|
-| `tetris.v` | Top-level wiring. PS/2, debouncer, FSM, painter, VGA, 7-seg. |
-| `gamelogic.v` | The state machine. Idle, Spawn, Fall, Lock, Game Over. |
-| `board.v` | Block-RAM-backed game board with multi-port reads. |
-| `piece_offsets.v` | 7 shapes by 4 rotations of (dx, dy) offsets. |
-| `randomiser.v` | LFSR-style next-piece selector. |
-| `render.v` + `render_tb.v` | Painter and its testbench. |
-| `PS2_Controller.v` + `PS2_Input.v` | PS/2 protocol decode, scan code valid pulse. |
-| `input_debouncing/` | Synchronous debouncers for the on-board KEY inputs. |
-| `SevSegDecoder.v` | 4-bit nibble to 7-segment hex display. |
-| `vga_background.v`, `vga_debug.v`, `VGA/` | VGA helpers and the standard adapter. |
-| `*.mif` | Memory-init files for VGA backgrounds and frames. |
+```
+src/
+├── tetris.v               # Top-level wiring: PS/2, debouncer, FSM, painter, VGA, 7-seg
+├── game/                  # Game logic
+│   ├── gamelogic.v        # 5-state FSM: Idle, Spawn, Fall, Lock, Game Over
+│   ├── board.v            # Block-RAM-backed game board with multi-port reads
+│   ├── piece_offsets.v    # 7 tetrominoes × 4 rotations of (dx, dy) offsets
+│   └── randomiser.v       # LFSR-style next-piece selector
+├── io/                    # Inputs and on-board outputs
+│   ├── PS2_Controller.v   # PS/2 protocol decode
+│   ├── PS2_Input.v        # PS/2 scan-code-valid pulse generator
+│   ├── SevSegDecoder.v    # 4-bit nibble to 7-segment hex display
+│   └── input_debouncing/  # Synchronous debouncers for the on-board KEY inputs
+└── vga/                   # Pixel pipeline
+    ├── render.v           # Painter: rasterizes board + active piece to framebuffer
+    ├── vga_background.v   # Static background drawing
+    ├── vga_debug.v        # Debug overlay
+    └── adapter/           # Standard UofT-provided VGA adapter package
+
+testbench/
+└── render_tb.v            # Painter testbench
+
+assets/
+├── bmp_640_9.mif          # Memory-init files used by the VGA pipeline
+├── frame_640.bmp
+├── framefinal.bmp
+└── framefinal.mif
+```
+
+The `src/vga/adapter/` directory contains the standard UofT-provided VGA adapter package. Every other `.v` file in this repo is original.
 
 ## 🚀 Build and run
 
@@ -67,7 +84,7 @@ This targets an Intel/Altera DE-series board (tested pinout matches DE1-SoC, DE2
 Steps:
 
 1. Create a new Quartus project, target your board's FPGA family (e.g. Cyclone V for DE1-SoC).
-2. Add every `.v` file in this repo as a project source, plus the `*.mif` files as memory init data.
+2. Add every `.v` file under `src/` (recursively) as a project source, plus every file under `assets/` and `src/vga/adapter/` as memory init data.
 3. Set `tetris` as the top-level entity.
 4. Pin-assign `CLOCK_50`, `KEY`, `SW`, `LEDR`, `HEX0`, `HEX1`, `PS2_CLK`, `PS2_DAT`, and the `VGA_*` signals to match your board's pin file.
 5. Compile, program the FPGA, plug in a PS/2 keyboard, and connect VGA.
