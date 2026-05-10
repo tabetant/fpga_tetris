@@ -1,0 +1,45 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Quartus Prime build artifacts
+db/
+incremental_db/
+output_files/
+greybox_tmp/
+simulation/
+*.qws
+*.swl
+*.smsg
+*.qmsg
+*.qsmsg
+*.summary
+*.done
+*.rpt
+*.sof
+*.pof
+*.jic
+*.jdi
+*.sopcinfo
+*.sof.bak
+*.qdf
+*.bak
+*.qsys_partition
+*_partitions/
+
+# ModelSim / Questa
+work/
+transcript
+*.wlf
+*.vstf
+*.cf
+
+# Editors / IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
