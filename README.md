@@ -95,7 +95,9 @@ Controls: A = left, D = right, W = rotate. KEY[3] is the active-low reset.
 
 Photo or video of the board running the game: TBD.
 
-## 👤 Author
+## 👥 Team
 
-**Antoine Tabet**, UofT Computer Engineering
-[LinkedIn](https://linkedin.com/in/antoinetabetuoft) · [antoine.tabet@mail.utoronto.ca](mailto:antoine.tabet@mail.utoronto.ca) · [GitHub](https://github.com/tabetant)
+Built at UofT:
+
+- **Antoine Tabet** ([@tabetant](https://github.com/tabetant)) · [LinkedIn](https://linkedin.com/in/antoinetabetuoft) · [antoine.tabet@mail.utoronto.ca](mailto:antoine.tabet@mail.utoronto.ca)
+- **VJunez** ([@VJunez](https://github.com/VJunez))
